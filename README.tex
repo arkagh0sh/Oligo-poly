@@ -602,6 +602,20 @@ the ordinary Gr\"{o}bner basis,
 the union of the reduced Gr\"{o}bner bases of the $2^n$ elimination ideals,
 and the colouring.
 %
+\paragraph{A variant with one colour.}
+The function \code{one\_colour\_groebner\_basis} is an experimental variant of the colouring.
+Every coloured polynomial has at most one high variable:
+a generator $h$ is coloured in the $|\mathsf{supp}(h)| + 1$ ways with at most one high variable.
+The S-polynomial of two coloured polynomials is only formed if their colours are consistent:
+together they have at most one high variable, and they do not contain both copies of an atom.
+A new polynomial that keeps its high variable is added as it is;
+a new polynomial without a high variable is added with every variable low,
+and also with each one of its variables high.
+It is not proved that the result is always an equivariant Gr\"{o}bner basis.
+In the experiments so far it always was:
+on $300$ random ideals in $3$, $4$ and $5$ variables, checked against all elimination ideals,
+and on the ideals of \code{equivariant\_demo} over $\dloQ$ and over $\mathcal{T}_<$.
+%
 \section{Dense meet-trees}\label{sec:trees}
 %
 The file \code{tree.rs} implements the atoms of the universal countable dense meet-tree with a lexicographic order,

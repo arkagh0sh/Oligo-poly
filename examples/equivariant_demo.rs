@@ -1,14 +1,15 @@
 //! Runs the equivariant Buchberger algorithm on small equivariant ideals of
 //! polynomials whose variables are atoms of (Q, <) or of the dense meet-tree
 //! T_<, with rational coefficients. For each ideal, it compares the weak basis
-//! of `equivariant_buchberger` with the equivariant Gröbner basis of
-//! `equivariant_groebner_basis`.
+//! of `equivariant_buchberger`, the equivariant Gröbner basis of
+//! `equivariant_groebner_basis`, and the result of the experimental variant
+//! `one_colour_groebner_basis`.
 //!
 //! Usage: `cargo run --release --features equivariant --example equivariant_demo`
 
 use atomic_hilbert::atoms::{AtomsWithOrd, Orbit};
 use atomic_hilbert::dlo::DLO;
-use atomic_hilbert::equivariant::{equivariant_buchberger, equivariant_groebner_basis, minimal_basis, OrbitList};
+use atomic_hilbert::equivariant::{equivariant_buchberger, equivariant_groebner_basis, minimal_basis, one_colour_groebner_basis, OrbitList};
 use atomic_hilbert::mon::Polynomial;
 use atomic_hilbert::tree::Tree;
 use num_rational::BigRational;
@@ -37,12 +38,12 @@ fn run<A : AtomsWithOrd + Display>(name : &str, generators : Vec<Polynomial<BigR
         println!("  generator: orbit of {g}");
     }
     let orbits : OrbitList<BigRational, A> = generators.into_iter().map(Orbit::new).collect();
-    for strong in [false, true] {
+    for method in 0..3 {
         let start = Instant::now();
-        let (label, result) = if strong {
-            ("equivariant Groebner basis (equivariant_groebner_basis)", equivariant_groebner_basis(orbits.clone(), 500))
-        } else {
-            ("weak basis (equivariant_buchberger)", equivariant_buchberger(orbits.clone(), 500))
+        let (label, result) = match method {
+            0 => ("weak basis (equivariant_buchberger)", equivariant_buchberger(orbits.clone(), 500)),
+            1 => ("equivariant Groebner basis (equivariant_groebner_basis)", equivariant_groebner_basis(orbits.clone(), 500)),
+            _ => ("one-colour variant (one_colour_groebner_basis)", one_colour_groebner_basis(orbits.clone(), 500)),
         };
         match result {
             Ok(basis) => {

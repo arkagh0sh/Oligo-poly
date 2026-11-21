@@ -51,6 +51,16 @@ and with the union of the reduced Gröbner bases of all 2^n elimination ideals
 cargo run --release --features equivariant --example elimination_comparison -- --verbose --ideal "x2 + -1*x1; x1^2"
 ```
 
+`one_colour_groebner_basis` is an experimental variant of the trick: every
+coloured polynomial has at most one high variable, an S-polynomial is only
+formed for pairs with consistent colours, and every new polynomial without a
+high variable is added again with each one of its variables high. It is not
+proved that its result is always an equivariant Gröbner basis. So far it was
+correct on every example: 300 random ideals in 3, 4 and 5 variables
+(`elimination_comparison --random 100 --vars N`), the built-in ideals, and
+the ideals of `equivariant_demo` over (Q, <) and over trees. It is often much
+faster than the full trick.
+
 ## Examples
 
 ### Gröbner bases

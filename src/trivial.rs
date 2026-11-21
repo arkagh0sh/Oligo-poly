@@ -65,7 +65,7 @@ impl ElementsWithAtoms<Var> for Var {
 mod tests {
     use super::*;
     use crate::atoms::Orbit;
-    use crate::equivariant::{equivariant_groebner_basis, PolynomialOrbit};
+    use crate::equivariant::{equivariant_groebner_basis, one_colour_groebner_basis, PolynomialOrbit};
     use crate::ideal::{buchberger, elimination_ideal};
     use crate::mon::Polynomial;
     use num_rational::Rational64 as Q;
@@ -106,6 +106,11 @@ mod tests {
         polynomials(&equivariant_groebner_basis(orbits, 500).ok().unwrap())
     }
 
+    fn one_colour(generators : &[P]) -> Vec<P> {
+        let orbits : Vec<PolynomialOrbit<Q, Var>> = generators.iter().cloned().map(Orbit::new).collect();
+        polynomials(&one_colour_groebner_basis(orbits, 500).ok().unwrap())
+    }
+
     #[test]
     fn a_reduced_basis_without_the_property() {
         // I = <x2 - x1, x1^2>. The reduced Gröbner basis {x2 - x1, x1^2} has no
@@ -116,6 +121,7 @@ mod tests {
         let basis = colouring(&generators);
         assert!(basis.contains(&(x(2) * x(2))));
         assert!(failing_sets(&generators, &basis, 2).is_empty());
+        assert!(failing_sets(&generators, &one_colour(&generators), 2).is_empty());
     }
 
     #[test]
@@ -123,6 +129,7 @@ mod tests {
         let generators = vec![x(2) - x(1) * x(1), x(3) - x(1) * x(1) * x(1)];
         let basis = colouring(&generators);
         assert!(failing_sets(&generators, &basis, 3).is_empty());
+        assert!(failing_sets(&generators, &one_colour(&generators), 3).is_empty());
         // The ordinary basis misses the cuspidal cubic in K[x2, x3].
         let ordinary = buchberger(generators.clone());
         assert_eq!(failing_sets(&generators, &ordinary, 3), vec![BTreeSet::from([Var(2), Var(3)])]);
@@ -157,6 +164,8 @@ mod tests {
                 .collect();
             let basis = colouring(&generators);
             assert!(failing_sets(&generators, &basis, 3).is_empty(), "generators {generators:?}");
+            let basis = one_colour(&generators);
+            assert!(failing_sets(&generators, &basis, 3).is_empty(), "one colour, generators {generators:?}");
         }
     }
 }
