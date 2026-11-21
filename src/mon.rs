@@ -46,6 +46,11 @@ impl<X: Hash + Ord + Clone> Monomial<X> {
         Monomial::new(self.expo.iter().map(|(x, e)| (f(x), *e)).collect())
     }
 
+    /// The total degree: the sum of the exponents.
+    pub fn degree(&self) -> Exponent {
+        self.expo.values().sum()
+    }
+
     pub fn is_divisible_by(&self, other : &Monomial<X>) -> bool {
         let mut answer = true;
         for (x,n) in other.expo.iter() {
@@ -215,6 +220,11 @@ impl<F : AddAssign + Default + Eq + Zero + ConstOne + Clone, X : Hash + Ord + Cl
         Polynomial::new(vec![(Monomial::one(),c)])
     }
 
+    /// The monomials of the polynomial, in increasing order.
+    pub fn monomials(&self) -> impl DoubleEndedIterator<Item = &Monomial<X>> {
+        self.coeff.keys()
+    }
+
     /// The monomial `m` as a polynomial, with coefficient 1.
     pub fn from_monomial(m : Monomial<X>) -> Polynomial<F,X> {
         Polynomial::new(vec![(m, F::one())])
@@ -294,6 +304,17 @@ impl<F : AddAssign + Default + Eq + Zero + ConstOne + Clone, X : Hash + Ord + Cl
         let b2 = Polynomial::new(vec![(b,F::one()/other.leading_coeff())]);
         let g = b2 * other.clone();
         f - g
+    }
+
+    /// Cancels the term of `self` at the monomial `m` with a multiple of `other`.
+    /// The leading monomial of `other` must divide `m`.
+    pub fn reduce_term_by(self, m : &Monomial<X>, other : &Polynomial<F,X>) -> Polynomial<F,X>
+    where
+      F : Neg<Output = F> + Div<Output = F>
+    {
+        let coeff = self.coeff_of(m) / other.leading_coeff();
+        let quotient : Polynomial<F,X> = Polynomial::new(vec![(m.clone() / other.leading_mon(), coeff)]);
+        self - quotient * other.clone()
     }
 
     /// The normal form of `self` with respect to `reducers`: the remainder of the

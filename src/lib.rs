@@ -14,3 +14,5 @@ pub mod atoms;
 pub mod dlo;
 #[cfg(feature = "equivariant")]
 pub mod elements_with_atoms;
+#[cfg(feature = "equivariant")]
+pub mod equivariant;

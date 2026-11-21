@@ -1,5 +1,5 @@
 use std::collections::BTreeSet;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display, Formatter, Result};
 use std::hash::Hash;
 use std::marker::PhantomData;
 use super::elements_with_atoms::*;
@@ -70,6 +70,13 @@ impl<A : AtomsWithOrd, B : ElementsWithAtoms<A>> Orbit<A, B> {
         Orbit::new(f(&self.rep))
     }
 
+    /// The value of a function `f` on the orbit. The function must be invariant,
+    /// that is, f(π(b)) = f(b) for every automorphism π, so it is constant on the
+    /// orbit. Examples are the degree of a polynomial and the size of a support.
+    pub fn evaluate<T>(&self, f : impl Fn(&B) -> T) -> T {
+        f(&self.rep)
+    }
+
     /// The orbit itself if the predicate `p` holds on it, and `None` otherwise.
     /// The predicate must be equivariant, so it is constant on the orbit.
     pub fn filter(&self, p : impl Fn(&B) -> bool) -> Option<Orbit<A, B>> {
@@ -88,6 +95,13 @@ impl<A : AtomsWithOrd, B : ElementsWithAtoms<A>> PartialEq for Orbit<A, B> {
 }
 
 impl<A : AtomsWithOrd, B : ElementsWithAtoms<A>> Eq for Orbit<A, B> {}
+
+/// Displays the orbit through its representative, for output only.
+impl<A : AtomsWithOrd, B : ElementsWithAtoms<A> + Display> Display for Orbit<A, B> {
+    fn fmt(&self, f : &mut Formatter<'_>) -> Result {
+        write!(f, "orbit of {}", self.rep)
+    }
+}
 
 /*
   atoms to add
