@@ -186,7 +186,7 @@ where
 /// Chain criterion: the pair (i, j) can be skipped if some k other than i and j
 /// has LM(g_k) dividing lcm(LM(g_i), LM(g_j)) and the pairs {i, k} and {j, k}
 /// have already been treated.
-fn chain_criterion<F, X>(i : usize, j : usize, pairs : &BTreeSet<(usize, usize)>, basis : &[Polynomial<F,X>]) -> bool
+pub(crate) fn chain_criterion<F, X>(i : usize, j : usize, pairs : &BTreeSet<(usize, usize)>, basis : &[Polynomial<F,X>]) -> bool
 where
     F : AddAssign + Default + Eq + Zero + ConstOne + Clone,
     X : Ord + Hash + Clone,

@@ -5,6 +5,7 @@ pub mod bits;
 pub mod helpers;
 pub mod ideal;
 pub mod mon;
+pub mod parallel;
 
 // The equivariant framework is still under development. It is only built with
 // `cargo build --features equivariant`.

@@ -139,6 +139,26 @@ I. The weak basis is the orbit of the generator alone, so x_b − x_a does not
 reduce to zero by it, while `equivariant_groebner_basis` adds the orbit of
 x_b − x_a for incomparable a and b (test `differences_along_the_tree_order`).
 
+### Parallel Buchberger algorithms
+
+`src/parallel.rs` has two parallel versions of Buchberger's algorithm, with the
+same criteria and the same normal selection strategy as `ideal::buchberger`:
+
+- `buchberger_batch`: in each round, all pending S-polynomials are reduced in
+  parallel, and all non-zero remainders are added;
+- `buchberger_first`: the pending S-polynomials are reduced in parallel in the
+  order of the normal strategy, and only the first one that does not reduce to
+  zero is added; the pairs whose S-polynomials reduced to zero are marked as
+  done, and the other pairs stay pending. With one thread, this is the
+  sequential algorithm.
+
+The example `parallel_buchberger` compares them with the sequential algorithm
+on the cyclic and Katsura systems and on random ideals:
+
+```sh
+cargo run --release --example parallel_buchberger -- --threads 1,2,4 katsura-4
+```
+
 ## Documentation
 
 `README.tex` explains the theory and the implementation.
