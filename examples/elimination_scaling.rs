@@ -307,6 +307,15 @@ fn to_gfan(p : &P) -> String {
         let c = p.coeff_of(m);
         let written = m.to_string();
         let factors : Vec<&str> = written.trim_matches(|ch| ch == '(' || ch == ')').split_whitespace().filter(|f| *f != "1").collect();
+        // Rename x<i> to x<i> with three digits, as in the ring given to gfan.
+        let factors : Vec<String> = factors
+            .iter()
+            .map(|f| {
+                let (var, exp) = f.split_once('^').unwrap_or((f, "1"));
+                let i : u32 = var.trim_start_matches('x').parse().expect("bad variable");
+                format!("x{i:03}^{exp}")
+            })
+            .collect();
         let monomial = factors.join("*");
         let term = if monomial.is_empty() {
             c.to_string()
@@ -370,7 +379,9 @@ fn parse_gfan(src : &str) -> P {
 /// includes starting gfan.
 fn run_gfan(generators : &[P], timeout : Duration) -> Status {
     let n = generators.iter().flat_map(|g| g.domain()).map(|v| v.0).max().unwrap_or(1);
-    let ring : Vec<String> = (1..=n).map(|i| format!("x{i}")).collect();
+    // gfan misreads a variable whose name is a prefix of another one (x1 and
+    // x10), so all names have the same length: x001, x002, ...
+    let ring : Vec<String> = (1..=n).map(|i| format!("x{i:03}")).collect();
     let input = format!("Q[{}]{{{}}}\n", ring.join(","), generators.iter().map(to_gfan).collect::<Vec<_>>().join(", "));
     let start = Instant::now();
     let mut child = Command::new("gfan_bases")
