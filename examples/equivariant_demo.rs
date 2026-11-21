@@ -2,7 +2,7 @@
 //! polynomials whose variables are atoms of (Q, <) or of the dense meet-tree
 //! T_<, with rational coefficients. For each ideal, it compares the weak basis
 //! of `equivariant_buchberger`, the equivariant Gröbner basis of
-//! `equivariant_groebner_basis`, and the result of the experimental variant
+//! `equivariant_groebner_basis`, and the result of the variant
 //! `one_colour_groebner_basis`.
 //!
 //! Usage: `cargo run --release --features equivariant --example equivariant_demo`

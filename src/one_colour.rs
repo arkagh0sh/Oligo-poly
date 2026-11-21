@@ -2,9 +2,10 @@
 //! without the orbit framework (compare `equivariant::one_colour_groebner_basis`
 //! with the variables of `trivial.rs`, which computes the same kind of basis).
 //!
-//! For an ideal I of K[X], it computes a basis B such that, as far as the
-//! experiments show (this is not proved), for every set V of variables the
-//! elements of B in K[X_V] form a Gröbner basis of I ∩ K[X_V].
+//! For an ideal I of K[X], it computes a basis B such that, for every set V of
+//! variables, the elements of B in K[X_V] form a Gröbner basis of I ∩ K[X_V].
+//! This is proved in the section "Correctness of the one-colour variant" of `README.tex`, with
+//! and without the criteria below, and the algorithm always stops.
 //!
 //! A coloured variable is a pair (high, x): `(false, x)` is the low copy of x
 //! and `(true, x)` its high copy. Since `false < true`, every high variable is
@@ -197,6 +198,22 @@ where
     F : AddAssign + Clone + ConstOne + Default + Zero + Eq + Div<Output = F> + Neg<Output = F> + Sub + Ord,
     X : Ord + Hash + Clone,
 {
+    let forgotten : BTreeSet<Polynomial<F, X>> = coloured_basis(generators, options)
+        .iter()
+        .map(|p| p.map_variables(|(_, x)| x.clone()))
+        .filter(|p| !p.is_zero())
+        .map(|p| p.monic())
+        .collect();
+    forgotten.into_iter().collect()
+}
+
+/// The coloured basis computed by `one_colour_basis`, before the colours are
+/// forgotten.
+fn coloured_basis<F, X>(generators : Vec<Polynomial<F, X>>, options : Options) -> Vec<Polynomial<F, Coloured<X>>>
+where
+    F : AddAssign + Clone + ConstOne + Default + Zero + Eq + Div<Output = F> + Neg<Output = F> + Sub + Ord,
+    X : Ord + Hash + Clone,
+{
     let mut state = State {
         basis : Vec::new(),
         seen : BTreeSet::new(),
@@ -240,14 +257,7 @@ where
             }
         }
     }
-    let forgotten : BTreeSet<Polynomial<F, X>> = state
-        .basis
-        .iter()
-        .map(|e| e.poly.map_variables(|(_, x)| x.clone()))
-        .filter(|p| !p.is_zero())
-        .map(|p| p.monic())
-        .collect();
-    forgotten.into_iter().collect()
+    state.basis.into_iter().map(|e| e.poly).collect()
 }
 
 #[cfg(test)]
@@ -310,6 +320,56 @@ mod tests {
         let generators = vec![x(2) - x(1) * x(1), x(3) - x(1) * x(1) * x(1)];
         for options in all_options() {
             assert_eq!(failing_sets(&generators, &one_colour_basis(generators.clone(), options), 3), 0);
+        }
+    }
+
+    /// The worlds of a coloured basis B: for no variable, the elements without a
+    /// high variable; for a variable z, the elements whose only high variable is
+    /// z and that do not contain the low copy of z. The lemmas of the proof of
+    /// correctness imply that the elements of a world, with the colours
+    /// forgotten, form a Gröbner basis of the ideal for the order of the world:
+    /// the original order for no variable, and the order in which z is the
+    /// largest variable for z. This test checks that consequence.
+    fn check_worlds(generators : &[P], options : Options) {
+        let coloured = coloured_basis(generators.to_vec(), options);
+        let vars : BTreeSet<u32> = generators.iter().flat_map(|g| g.domain()).collect();
+        let worlds = std::iter::once(None).chain(vars.iter().map(|z| Some(*z)));
+        for world in worlds {
+            // In the world, a variable x becomes (x == z, x), so z is the largest.
+            let tag = |x : &u32| (Some(*x) == world, *x);
+            let in_world : Vec<Polynomial<Q, (bool, u32)>> = coloured
+                .iter()
+                .filter(|p| p.domain().iter().all(|(high, x)| *high == (Some(*x) == world)))
+                .map(|p| p.map_variables(|(_, x)| tag(x)))
+                .collect();
+            let reference = buchberger(generators.iter().map(|g| g.map_variables(tag)).collect());
+            for e in &reference {
+                assert!(
+                    in_world.iter().any(|h| e.leading_mon().is_divisible_by(&h.leading_mon())),
+                    "world {world:?}: no element of the world divides a leading monomial of the reference basis"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn worlds_are_groebner_bases() {
+        let mut rng = Rng(0x9e3779b97f4a7c15);
+        for _ in 0..10 {
+            let generators : Vec<P> = (0..3)
+                .map(|_| {
+                    (0..3).fold(P::zero(), |f, _| {
+                        let mut t = Polynomial::constant(Q::from_integer([-2, -1, 1, 2][rng.below(4) as usize].into()));
+                        for _ in 0..1 + rng.below(2) {
+                            t = t * x(1 + rng.below(3) as u32);
+                        }
+                        f + t
+                    })
+                })
+                .collect();
+            for options in creation_order_options() {
+                check_worlds(&generators, options);
+            }
         }
     }
 

@@ -9,7 +9,7 @@
 //!   ideals, each computed by `ideal::elimination_ideal` (Buchberger's algorithm
 //!   for a lexicographic elimination order);
 //! - one-colour: `equivariant::one_colour_groebner_basis` with the variables of
-//!   `trivial.rs` (experimental, not proved correct);
+//!   `trivial.rs` (proved correct in `README.tex`);
 //! - direct: `one_colour::one_colour_basis` with its default options, the same
 //!   algorithm without the orbit framework, with the adapted Buchberger
 //!   criteria and the pairs in the order of creation;

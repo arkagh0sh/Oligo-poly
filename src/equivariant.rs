@@ -269,9 +269,11 @@ fn consistent_colours<F : Field, A : AtomsWithOrd>(p : &Polynomial<F, Coloured<A
 }
 
 /// A variant of `equivariant_groebner_basis` in which every coloured polynomial
-/// has at most one high variable. This variant is experimental: it is not
-/// known whether its result is always an equivariant Gröbner basis, and the
-/// examples `equivariant_demo` and `elimination_comparison` test it.
+/// has at most one high variable. When it stops, its result is an equivariant
+/// Gröbner basis, and for finitely many variables it always stops; see
+/// the section "Correctness of the one-colour variant" of `README.tex`. The examples
+/// `equivariant_demo` and `elimination_comparison` compare it with the other
+/// algorithms.
 ///
 /// 1. Every generator h is coloured in the |supp(h)| + 1 ways with at most one
 ///    high variable (`colourings_with_at_most_one_high`).
@@ -612,7 +614,7 @@ mod tests {
         check_membership(&dlo_atoms(), &generators, &basis, vanishes_at_zero_and_one);
     }
 
-    /// The experimental variant with at most one high variable gives a correct
+    /// The variant with at most one high variable gives a correct
     /// basis for <x_a x_b - x_c : a < b < c>.
     #[test]
     fn one_colour_variant_with_three_atoms() {
@@ -673,7 +675,7 @@ mod tests {
             check_membership(&tree_atoms(), &generators, &basis, vanishes_on_the_diagonal);
         }
 
-        /// The experimental variant with at most one high variable also adds the
+        /// The variant with at most one high variable also adds the
         /// orbit of x_a - x_b for incomparable a and b.
         #[test]
         fn one_colour_variant_on_differences() {

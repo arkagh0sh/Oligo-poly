@@ -15,12 +15,11 @@
 //!    `trivial.rs`, that is, forget(weakgb(freecol(H))) of Section 5 of Ghosh and
 //!    Lopez. It runs one Buchberger algorithm with the support condition, on 2n
 //!    coloured variables and 2^|supp h| colourings of each generator h.
-//! 4. One-colour trick: `one_colour_groebner_basis`, the experimental variant in
-//!    which every coloured polynomial has at most one high variable, only pairs
-//!    with consistent colours give S-polynomials, and new polynomials without a
-//!    high variable are added again with each one of their variables high. It is
-//!    not known whether this variant always has the property; the column
-//!    "failing V" tests it.
+//! 4. One-colour trick: `one_colour_groebner_basis`, the variant in which every
+//!    coloured polynomial has at most one high variable, only pairs with
+//!    consistent colours give S-polynomials, and new polynomials without a high
+//!    variable are added again with each one of their variables high. It has
+//!    the property (see `README.tex`); the column "failing V" checks it.
 //!
 //! For each method, the program prints the time, the number of polynomials of
 //! the basis, the number of them that remain after removing every h for which
