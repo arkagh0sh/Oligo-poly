@@ -71,6 +71,11 @@ bases. It reports the time, the steps counted by `src/counters.rs`
 size of the final basis (polynomials, polynomials after removing redundant
 ones, and terms).
 
+With `--methods elimination,direct,gfan`, it also compares with gfan
+(installed for example with `apt-get install gfan`): the union of all reduced
+Gröbner bases computed by `gfan_bases` is a universal Gröbner basis, which
+also has the property.
+
 ```sh
 cargo run --release --features equivariant --example elimination_scaling -- --vars 5,6,7 --count 10 --timeout 60
 ```

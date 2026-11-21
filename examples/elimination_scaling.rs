@@ -16,7 +16,14 @@
 //! - direct-plain: the same without the criteria, which makes the same
 //!   reductions as one-colour;
 //! - colouring: `equivariant::equivariant_groebner_basis` (the full trick);
-//! - ordinary: `ideal::buchberger`, which does not have the property in general.
+//! - ordinary: `ideal::buchberger`, which does not have the property in general;
+//! - gfan: the union of all reduced Gröbner bases, computed by the program
+//!   `gfan_bases` of gfan (which must be installed, for example with
+//!   `apt-get install gfan`). This is a universal Gröbner basis: it is a
+//!   Gröbner basis for every monomial order, so it has the property. gfan runs
+//!   directly (not in a child process), its time includes starting it, and it
+//!   reports no steps; the last column gives the number of reduced Gröbner
+//!   bases (the number of maximal cones of the Gröbner fan).
 //!
 //! Each method runs on each ideal in a child process that is stopped after
 //! `--timeout` seconds, so a hard ideal does not block the experiment. The time
@@ -45,7 +52,7 @@
 //! - `--seed`: changes the random ideals (default 1).
 //! - `--timeout`: the time limit for one method on one ideal (default 30).
 //! - `--methods`: a comma-separated list among elimination, one-colour,
-//!   direct, direct-plain, colouring and ordinary (default
+//!   direct, direct-plain, colouring, ordinary and gfan (default
 //!   elimination,one-colour,direct).
 //! - `--csv FILE`: also write one line per ideal and method to FILE.
 //!
@@ -87,7 +94,7 @@ use std::time::{Duration, Instant};
 type Q = BigRational;
 type P = Polynomial<Q, Var>;
 
-const METHODS : [&str; 6] = ["elimination", "one-colour", "direct", "direct-plain", "colouring", "ordinary"];
+const METHODS : [&str; 7] = ["elimination", "one-colour", "direct", "direct-plain", "colouring", "ordinary", "gfan"];
 
 /// The command-line options of the parent process.
 struct Options {
@@ -138,7 +145,7 @@ impl Options {
                 "--csv" => {
                     let path = args.next().expect("--csv needs a file name");
                     let mut file = File::create(&path).expect("cannot create the CSV file");
-                    writeln!(file, "variables,ideal,method,status,ms,s_polynomials,reductions,added,size,minimal,terms,property").unwrap();
+                    writeln!(file, "variables,ideal,method,status,ms,s_polynomials,reductions,added,size,minimal,terms,property,bases").unwrap();
                     options.csv = Some(file);
                 }
                 other => panic!("unknown option {other}"),
@@ -286,9 +293,124 @@ fn child(method : &str) {
 
 /// The outcome of one method on one ideal.
 enum Status {
-    Done { ms : f64, counts : Counts, basis : Vec<P> },
+    /// The time, the step counts (not for gfan), the number of reduced Gröbner
+    /// bases (for gfan only) and the basis.
+    Done { ms : f64, counts : Option<Counts>, bases : Option<usize>, basis : Vec<P> },
     Timeout,
     Limit,
+}
+
+/// Writes a polynomial in the input syntax of gfan, such as `x1^2*x3-3/2*x2+1`.
+fn to_gfan(p : &P) -> String {
+    let mut out = String::new();
+    for m in p.monomials().rev() {
+        let c = p.coeff_of(m);
+        let written = m.to_string();
+        let factors : Vec<&str> = written.trim_matches(|ch| ch == '(' || ch == ')').split_whitespace().filter(|f| *f != "1").collect();
+        let monomial = factors.join("*");
+        let term = if monomial.is_empty() {
+            c.to_string()
+        } else if c == Q::one() {
+            monomial
+        } else if c == -Q::one() {
+            format!("-{monomial}")
+        } else {
+            format!("{c}*{monomial}")
+        };
+        if !out.is_empty() && !term.starts_with('-') {
+            out.push('+');
+        }
+        out += &term;
+    }
+    if out.is_empty() { "0".to_string() } else { out }
+}
+
+/// Reads a polynomial in the output syntax of gfan.
+fn parse_gfan(src : &str) -> P {
+    let s : String = src.chars().filter(|c| !c.is_whitespace()).collect();
+    // Split into signed terms: a sign starts a new term, except at the start.
+    let mut terms : Vec<String> = Vec::new();
+    let mut current = String::new();
+    for ch in s.chars() {
+        if (ch == '+' || ch == '-') && !current.is_empty() {
+            terms.push(std::mem::take(&mut current));
+        }
+        if ch != '+' {
+            current.push(ch);
+        }
+    }
+    if !current.is_empty() {
+        terms.push(current);
+    }
+    let mut f = P::zero();
+    for term in terms {
+        let (sign, body) = match term.strip_prefix('-') {
+            Some(rest) => (-Q::one(), rest.to_string()),
+            None => (Q::one(), term),
+        };
+        let mut t = P::constant(sign);
+        for factor in body.split('*') {
+            if let Some(rest) = factor.strip_prefix('x') {
+                let mut it = rest.split('^');
+                let i : u32 = it.next().unwrap().parse().expect("bad variable in the output of gfan");
+                let e : u32 = it.next().map(|e| e.parse().expect("bad exponent in the output of gfan")).unwrap_or(1);
+                t = t * x(i).pow(e);
+            } else {
+                t = t * P::constant(factor.parse::<Q>().expect("bad coefficient in the output of gfan"));
+            }
+        }
+        f = f + t;
+    }
+    f
+}
+
+/// Runs `gfan_bases`, which computes all reduced Gröbner bases of the ideal,
+/// with a time limit, and returns their union (made monic for the order of
+/// `mon.rs`, without repetitions), which is a universal Gröbner basis. The time
+/// includes starting gfan.
+fn run_gfan(generators : &[P], timeout : Duration) -> Status {
+    let n = generators.iter().flat_map(|g| g.domain()).map(|v| v.0).max().unwrap_or(1);
+    let ring : Vec<String> = (1..=n).map(|i| format!("x{i}")).collect();
+    let input = format!("Q[{}]{{{}}}\n", ring.join(","), generators.iter().map(to_gfan).collect::<Vec<_>>().join(", "));
+    let start = Instant::now();
+    let mut child = Command::new("gfan_bases")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("cannot start gfan_bases: is gfan installed?");
+    child.stdin.take().unwrap().write_all(input.as_bytes()).unwrap();
+    let mut stdout = child.stdout.take().unwrap();
+    let reader = std::thread::spawn(move || {
+        let mut output = String::new();
+        stdout.read_to_string(&mut output).unwrap();
+        output
+    });
+    loop {
+        if child.try_wait().unwrap().is_some() {
+            break;
+        }
+        if start.elapsed() > timeout {
+            child.kill().ok();
+            child.wait().ok();
+            reader.join().ok();
+            return Status::Timeout;
+        }
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    let ms = start.elapsed().as_secs_f64() * 1000.0;
+    let output = reader.join().unwrap();
+    // The output is the ring on the first line, then {{...},{...},...}.
+    let body : String = output.lines().skip(1).collect::<Vec<_>>().join("");
+    let bases = body.matches('{').count().saturating_sub(1);
+    let union : BTreeSet<P> = body
+        .replace(['{', '}'], "")
+        .split(',')
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .map(|t| parse_gfan(t).monic())
+        .collect();
+    Status::Done { ms, counts : None, bases : Some(bases), basis : union.into_iter().collect() }
 }
 
 /// Runs one method on one ideal in a child process, with a time limit.
@@ -337,7 +459,7 @@ fn run_child(method : &str, generators : &[P], timeout : Duration) -> Status {
             basis.push(parse(p));
         }
     }
-    Status::Done { ms : ms.expect("the child process failed"), counts, basis }
+    Status::Done { ms : ms.expect("the child process failed"), counts : Some(counts), bases : None, basis }
 }
 
 /// Whether `basis` has the property for every set V, with `reference` as above.
@@ -355,9 +477,16 @@ fn minimal_size(basis : &[P]) -> usize {
     minimal_basis(basis.iter().cloned().map(Orbit::new).collect()).len()
 }
 
+/// The median of the values that are not NaN (NaN if there is none).
 fn median(values : &mut [f64]) -> f64 {
-    values.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    if values.is_empty() { f64::NAN } else { values[values.len() / 2] }
+    let mut v : Vec<f64> = values.iter().copied().filter(|x| !x.is_nan()).collect();
+    v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    if v.is_empty() { f64::NAN } else { v[v.len() / 2] }
+}
+
+/// A number for a table cell, or "-" if it is NaN.
+fn cell(v : f64, width : usize, digits : usize) -> String {
+    if v.is_nan() { format!("{:>width$}", "-") } else { format!("{v:>width$.digits$}") }
 }
 
 fn main() {
@@ -390,7 +519,10 @@ fn main() {
         for k in 1..=options.count {
             let generators = random_ideal(&mut rng, n, &options);
             let vars : Vec<Var> = (1..=n).map(Var).collect();
-            let statuses : Vec<Status> = methods.iter().map(|m| run_child(m, &generators, options.timeout)).collect();
+            let statuses : Vec<Status> = methods
+                .iter()
+                .map(|m| if m == "gfan" { run_gfan(&generators, options.timeout) } else { run_child(m, &generators, options.timeout) })
+                .collect();
             let reference = methods.iter().zip(&statuses).find_map(|(m, s)| match (m.as_str(), s) {
                 ("elimination", Status::Done { basis, .. }) => Some(basis.clone()),
                 _ => None,
@@ -398,7 +530,7 @@ fn main() {
             let mut row_metrics = Vec::new();
             for (i, (m, s)) in methods.iter().zip(&statuses).enumerate() {
                 match s {
-                    Status::Done { ms, counts, basis } => {
+                    Status::Done { ms, counts, bases, basis } => {
                         finished[i] += 1;
                         let minimal = minimal_size(basis);
                         let terms : usize = basis.iter().map(|p| p.monomials().count()).sum();
@@ -412,34 +544,33 @@ fn main() {
                             }
                             _ => "",
                         };
+                        let steps = match counts {
+                            Some(c) => [c.s_polynomials as f64, c.reductions as f64, c.added as f64],
+                            None => [f64::NAN; 3],
+                        };
+                        let fan = bases.map(|b| format!("{b} bases")).unwrap_or_default();
                         println!(
-                            "  {:>5} {:<12} {:>12.1} {:>10} {:>12} {:>8} {:>6} {:>8} {:>8} {:>9}",
-                            k, m, ms, counts.s_polynomials, counts.reductions, counts.added, basis.len(), minimal, terms, property
+                            "  {:>5} {:<12} {:>12.1} {} {} {} {:>6} {:>8} {:>8} {:>9} {}",
+                            k, m, ms, cell(steps[0], 10, 0), cell(steps[1], 12, 0), cell(steps[2], 8, 0), basis.len(), minimal, terms, property, fan
                         );
                         if let Some(file) = options.csv.as_mut() {
+                            let csv_step = |v : f64| if v.is_nan() { String::new() } else { format!("{v}") };
                             writeln!(
                                 file,
-                                "{n},{k},{m},done,{ms:.3},{},{},{},{},{minimal},{terms},{}",
-                                counts.s_polynomials, counts.reductions, counts.added, basis.len(),
-                                if property.is_empty() { "unchecked" } else { property }
+                                "{n},{k},{m},done,{ms:.3},{},{},{},{},{minimal},{terms},{},{}",
+                                csv_step(steps[0]), csv_step(steps[1]), csv_step(steps[2]), basis.len(),
+                                if property.is_empty() { "unchecked" } else { property },
+                                bases.map(|b| b.to_string()).unwrap_or_default()
                             )
                             .unwrap();
                         }
-                        row_metrics.push(Some([
-                            *ms,
-                            counts.s_polynomials as f64,
-                            counts.reductions as f64,
-                            counts.added as f64,
-                            basis.len() as f64,
-                            minimal as f64,
-                            terms as f64,
-                        ]));
+                        row_metrics.push(Some([*ms, steps[0], steps[1], steps[2], basis.len() as f64, minimal as f64, terms as f64]));
                     }
                     Status::Timeout | Status::Limit => {
                         let status = if matches!(s, Status::Timeout) { "timeout" } else { "limit" };
                         println!("  {:>5} {:<12} {:>12}", k, m, status);
                         if let Some(file) = options.csv.as_mut() {
-                            writeln!(file, "{n},{k},{m},{status},,,,,,,,").unwrap();
+                            writeln!(file, "{n},{k},{m},{status},,,,,,,,,").unwrap();
                         }
                         row_metrics.push(None);
                     }
@@ -464,7 +595,7 @@ fn main() {
                 m,
                 finished[i],
                 options.count,
-                medians[i].iter().map(|v| format!("{v:>12.1}")).collect::<Vec<_>>().join(""),
+                medians[i].iter().map(|v| cell(*v, 12, 1)).collect::<Vec<_>>().join(""),
                 failing[i]
             );
         }
@@ -473,7 +604,7 @@ fn main() {
                 println!(
                     "    {:<21} {}",
                     format!("{m}/elim."),
-                    (0..7).map(|c| format!("{:>12.2}", medians[o][c] / medians[e][c])).collect::<Vec<_>>().join("")
+                    (0..7).map(|c| cell(medians[o][c] / medians[e][c], 12, 2)).collect::<Vec<_>>().join("")
                 );
             }
         }
