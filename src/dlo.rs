@@ -2,7 +2,6 @@ use rug::Rational;
 use std::{collections::{BTreeSet,BTreeMap} , fmt::{Debug, Formatter, Result, Display}};
 use itertools::Itertools;
 use crate::elements_with_atoms::{ElementsWithAtoms, PartialAut};
-use contracts::{pre, post};
 
 use super::{atoms::*, helpers::*};
 

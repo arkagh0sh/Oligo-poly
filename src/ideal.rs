@@ -1,11 +1,7 @@
+use std::collections::BTreeSet;
 use std::hash::Hash;
-use std::clone::Clone;
-use std::cmp::{Eq, Ord, Ordering, Ordering::{Equal, Less, Greater}, max};
-use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::{Display, Formatter, Result};
-use itertools::Itertools;
-use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub};
-use num_traits::{Zero, identities::One, Pow, ConstOne};
+use std::ops::{AddAssign, Div, Neg, Sub};
+use num_traits::{ConstOne, Zero};
 
 use crate::mon::*;
 
@@ -178,6 +174,7 @@ where
 mod tests {
     use super::*;
     use crate::bits::F2;
+    use num_traits::One;
 
     type P2 = Polynomial<F2, String>;
 

@@ -14,7 +14,7 @@ use atomic_hilbert::bits::F2;
 use atomic_hilbert::ideal::buchberger;
 use atomic_hilbert::mon::Polynomial;
 use num_rational::BigRational;
-use num_traits::{ConstOne, One, Pow, Zero};
+use num_traits::{ConstOne, Pow, Zero};
 use std::io::Read;
 use std::ops::AddAssign;
 
@@ -55,7 +55,7 @@ fn main() {
     let mut input = String::new();
     std::io::stdin().read_to_string(&mut input).expect("cannot read standard input");
     let sources : Vec<&str> = input
-        .split(|c| c == ';' || c == '\n')
+        .split([';', '\n'])
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .collect();

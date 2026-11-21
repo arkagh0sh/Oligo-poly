@@ -1,7 +1,6 @@
-use std::{ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign, Div}};
+use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, Div};
 use std::fmt::Display;
 use num_traits::{ConstOne, One, Zero};
-use sorted_iter::sorted_pair_iterator::OuterJoin;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct F2(pub bool);
@@ -19,6 +18,7 @@ impl F2 {
 // Addition is XOR
 impl Add for F2 {
     type Output = Self;
+    #[allow(clippy::suspicious_arithmetic_impl)]
     fn add(self, rhs: Self) -> Self {
         F2(self.0 ^ rhs.0)
     }
@@ -27,6 +27,7 @@ impl Add for F2 {
 // Subtraction is ALSO XOR (since -1 = 1 mod 2)
 impl Sub for F2 {
     type Output = Self;
+    #[allow(clippy::suspicious_arithmetic_impl)]
     fn sub(self, rhs: Self) -> Self {
         F2(self.0 ^ rhs.0)
     }
@@ -35,6 +36,7 @@ impl Sub for F2 {
 // Multiplication is AND
 impl Mul for F2 {
     type Output = Self;
+    #[allow(clippy::suspicious_arithmetic_impl)]
     fn mul(self, rhs: Self) -> Self {
         F2(self.0 & rhs.0)
     }

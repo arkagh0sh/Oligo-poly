@@ -51,7 +51,7 @@ where
 {
     let mut result : BTreeMap<K,V> = map1;
     for (key, value) in map2 {
-        *result.entry(key).or_insert_with(Default::default) += value;
+        *result.entry(key).or_default() += value;
     }
     result.into_iter().filter(|(_, v)| !((*v).is_zero())).collect()
 }
@@ -105,7 +105,7 @@ pub fn count_between<X : Ord +Copy + Clone> (to_count : BTreeSet<X>, bounds : BT
         counts.push(to_count.range(bounds_vec[bounds_vec.len() - 1]..).count());
     }
 
-    return counts;
+    counts
 }
 
 pub fn has_unique_elements<T>(iter: T) -> bool 
@@ -123,7 +123,7 @@ where
 }
 
 pub fn union_all<T: Ord + Clone>(sets: &[BTreeSet<T>]) -> BTreeSet<T> {
-    sets.into_iter()
+    sets.iter()
         .flat_map(|s| s.iter().cloned())
         .collect()
 }
@@ -161,7 +161,7 @@ where
         .collect()
 }
 
-pub fn are_pointwise_equivalent<T, F>(vec_a: &Vec<T>, vec_b: &Vec<T>, relation: F) -> bool 
+pub fn are_pointwise_equivalent<T, F>(vec_a: &[T], vec_b: &[T], relation: F) -> bool 
 where 
     F: Fn(&T, &T) -> bool 
 {
@@ -176,7 +176,7 @@ where
          .all(|(a, b)| relation(a, b))
 }
 
-pub fn is_subvec<A : Hash + Eq>(subset: &Vec<A>, superset: &Vec<A>) -> bool {
+pub fn is_subvec<A : Hash + Eq>(subset: &[A], superset: &[A]) -> bool {
     let set: HashSet<_> = superset.iter().collect();
     subset.iter().all(|item| set.contains(item))
 }

@@ -12,8 +12,7 @@ use super::helpers::*;
 pub type Exponent = u32;
 
 /// A monomial, stored as a map from variables to their (non-zero) exponents.
-#[derive(Clone)]
-#[derive(Hash)]
+#[derive(Clone, Hash, PartialEq, Eq)]
 pub struct Monomial<X> where X : Ord + Clone {
     expo : BTreeMap<X,Exponent>
 }
@@ -35,7 +34,7 @@ impl<X: Hash + Ord + Clone> Monomial<X> {
     }
 
     fn exp_of(&self, x : &X) -> Exponent {
-        let a: Option<&Exponent> = self.expo.get(&x);
+        let a: Option<&Exponent> = self.expo.get(x);
         match a {
             Some(n) => *n,
             None => 0
@@ -72,25 +71,19 @@ impl<X: Hash + Ord + Clone> Monomial<X> {
                 continue;
             }
         }
-        return Equal;
+        Equal
     }
 }
-
-impl<X : Hash + Ord + Clone> PartialEq for Monomial<X> {
-    fn eq(&self, other: &Self) -> bool {
-        self.expo == other.expo 
-    }
-}
-
-impl<X : Hash + Ord + Clone> Eq for Monomial<X> {}
 
 impl<X : Hash + Ord + Clone> PartialOrd for  Monomial<X>{
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(&other))
+        Some(self.cmp(other))
     }
 }
 
-// We use the revlex order
+// Monomials are compared lexicographically, with the largest variable as the most
+// significant one: the exponents are compared at the largest variable where they
+// differ. For example, x^5 < y when x < y.
 
 impl<X : Hash + Ord + Clone> Ord for Monomial<X> {
     fn cmp(&self, other: &Self) -> Ordering {
@@ -168,36 +161,26 @@ impl<X : Clone + Ord + Hash> Pow<u8> for Monomial<X> {
 
 impl<X : Ord + Clone + Display> Debug for Monomial<X> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        let mut to_view : String = String::new();
-        for (x,n) in self.expo.iter() {
-            to_view = to_view + &x.to_string() + "^" + &n.to_string() + " ";
-        }
-        if !(self.expo.is_empty()) {
-            to_view = String::from("( ") + &to_view + ")";
-        } else {
-            to_view = to_view + "1";
-        }
-        write!(f,"{}",to_view)
+        write!(f, "{}", self)
     }
 }
 
+// Example: x y^2 is displayed as "( x^1 y^2 )", and the monomial 1 as "1".
 impl<X : Ord + Clone + Display> Display for Monomial<X> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        let mut to_view : String = String::new();
-        for (x,n) in self.expo.iter() {
-            to_view = to_view + &x.to_string() + "^" + &n.to_string() + " ";
+        if self.expo.is_empty() {
+            return write!(f, "1");
         }
-        if !(self.expo.is_empty()) {
-            to_view = String::from("( ") + &to_view + ")";
-        } else {
-            to_view = to_view + "1";
+        write!(f, "( ")?;
+        for (x, n) in self.expo.iter() {
+            write!(f, "{}^{} ", x, n)?;
         }
-        write!(f,"{}",to_view)
+        write!(f, ")")
     }
 }
 
-#[derive(Clone)]
-#[derive(Hash)]
+/// A polynomial, stored as a map from monomials to their (non-zero) coefficients.
+#[derive(Clone, Hash, PartialEq, Eq)]
 pub struct Polynomial<F,X>
 where
   X : Hash + Ord + Clone,
@@ -231,20 +214,9 @@ impl<F : AddAssign + Default + Eq + Zero + ConstOne + Clone, X : Hash + Ord + Cl
         self.clone() * self.clone()
     }
 
-    fn from_mon(p : Monomial<X>) -> Polynomial<F,X> {
-        Polynomial { coeff: BTreeMap::from([(p,F::one())]) }
-    }
-
+    /// The set of variables that occur in the polynomial.
     pub fn domain(&self) -> BTreeSet<X> {
-        let mut answer : BTreeSet<X> = BTreeSet::new();
-        for (p,_r) in self.coeff.iter() {
-            for x in p.domain() {
-                if !(answer.contains(&x)) {
-                    answer.insert(x);
-                }
-            }
-        }
-        answer
+        self.coeff.keys().flat_map(|p| p.domain()).collect()
     }
 
     /// The leading monomial (1 for the zero polynomial). The coefficient map is
@@ -290,18 +262,9 @@ impl<F : AddAssign + Default + Eq + Zero + ConstOne + Clone, X : Hash + Ord + Cl
         }
     }
 
-    pub fn is_reduced(&self, base : &[Polynomial<F,X>], support : &BTreeSet<X>) -> bool
-    where
-      F : Display,
-      X : Display
-    {
-        let mut answer = true;
-        for g in base {
-            if self.is_reducible_by(&g) {
-                answer = false;
-            }
-        }
-        answer
+    /// Whether `self` is not top-reducible by any polynomial in `base`.
+    pub fn is_reduced(&self, base : &[Polynomial<F,X>]) -> bool {
+        !base.iter().any(|g| self.is_reducible_by(g))
     }
 
     pub fn syzygy(self, other : &Polynomial<F,X>) -> Polynomial<F,X>
@@ -374,14 +337,6 @@ impl<F : AddAssign + Default + Eq + Zero + ConstOne + Clone, X : Hash + Ord + Cl
     }
 }
 
-impl<F : PartialEq, X : Hash + Ord + Clone> PartialEq for Polynomial<F,X> {
-    fn eq(&self, other: &Self) -> bool {
-        self.coeff == other.coeff
-    }
-}
-
-impl<F : PartialEq, X : Hash + Ord + Clone> Eq for Polynomial<F,X> {}
-
 impl<F : AddAssign + Default + Zero, X : Clone + Ord + Hash> Add for Polynomial<F,X> {
 
     type Output = Self;
@@ -399,7 +354,7 @@ impl<F : Default + AddAssign + Zero, X : Clone + Ord + Hash> Zero for Polynomial
     }
 
     fn is_zero(&self) -> bool {
-        self.coeff.len() == 0
+        self.coeff.is_empty()
     }
 }
 
@@ -408,7 +363,7 @@ impl<F : AddAssign + Default + Mul<Output = F> + Clone + Zero, X : Clone + Ord +
 
     type Output = Self;
 
-    fn mul(self : Self, other : Self) -> Self {
+    fn mul(self, other : Self) -> Self {
         let mut result: Polynomial<F,X> = Polynomial::zero();
         for (p1,r1) in self.coeff.iter() {
             for (p2, r2) in other.coeff.iter() {
@@ -448,7 +403,7 @@ impl<F : Clone + AddAssign + Default + One + Eq + Zero + ConstOne,X : Clone + Or
             self
         } else {
             let maybe_answer = self.clone().pow(rhs/2);
-            if rhs % 2 == 0 {
+            if rhs.is_multiple_of(2) {
                 maybe_answer.square()
             } else {
                 maybe_answer.square() * self
@@ -510,6 +465,8 @@ impl<F : Neg<Output = F> + Clone, X : Hash + Ord + Clone> Neg for Polynomial<F,X
 impl<F : Neg<Output = F> + Clone + AddAssign + Default + Zero, X : Hash + Ord + Clone> Sub for Polynomial<F,X> {
     type Output = Self;
 
+    // Subtraction is addition of the negation.
+    #[allow(clippy::suspicious_arithmetic_impl)]
     fn sub(self,other: Self) -> Self {
         self + other.neg()
     }
@@ -517,23 +474,21 @@ impl<F : Neg<Output = F> + Clone + AddAssign + Default + Zero, X : Hash + Ord + 
 
 impl<F : Neg<Output = F> + Clone + AddAssign + Default + Zero + Ord + ConstOne, X : Hash + Ord + Clone> PartialOrd for Polynomial<F,X> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        let dif = find_biggest_diff_key(&self.coeff, &other.coeff);
-       match dif {
-            None => Some(Equal),
-            Some(x) => if self.coeff_of(&x) < other.coeff_of(&x) {
-                Some(Less)
-            } else {
-                Some(Greater)
-            }
-        }
+        Some(self.cmp(other))
     }
 }
 
+// A total order on polynomials (used to store them in sorted sets): compare the
+// coefficients of the largest monomial at which the two polynomials differ.
 impl<F : Neg<Output = F> + Clone + AddAssign + Default + Zero + Ord + ConstOne, X : Hash + Ord + Clone> Ord for Polynomial<F,X> {
     fn cmp(&self, other: &Self) -> Ordering {
-        match self.partial_cmp(other) {
-            Some(a) => a,
-            None => panic!("The ordering is supposed to be total")
+        match find_biggest_diff_key(&self.coeff, &other.coeff) {
+            None => Equal,
+            Some(x) => if self.coeff_of(&x) < other.coeff_of(&x) {
+                Less
+            } else {
+                Greater
+            }
         }
     }
 }
