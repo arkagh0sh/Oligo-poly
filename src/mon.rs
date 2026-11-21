@@ -247,14 +247,13 @@ impl<F : AddAssign + Default + Eq + Zero + ConstOne + Clone, X : Hash + Ord + Cl
         answer
     }
 
+    /// The leading monomial (1 for the zero polynomial). The coefficient map is
+    /// sorted by the monomial order, so this is its last key.
     pub fn leading_mon(&self) -> Monomial<X> {
-        let mut answer = Monomial::one();
-        for (p,_c) in self.coeff.iter() {
-            if answer.compare(&p) == Less {
-                answer = p.clone();
-            }
+        match self.coeff.keys().next_back() {
+            Some(p) => p.clone(),
+            None => Monomial::one(),
         }
-        answer
     }
 
     pub fn leading_coeff(&self) -> F {
@@ -591,6 +590,16 @@ mod tests {
         let p = x.clone().pow(200u8) * x.clone().pow(200u8);
         assert_eq!(p, x.clone().pow(400 as Exponent));
         assert!(p != x);
+    }
+
+    #[test]
+    fn leading_monomial_is_the_maximum() {
+        let (x, y, z) = (v2("x"), v2("y"), v2("z"));
+        let p = x.clone().pow(5u8) + y.clone() * z.clone() + y.clone().pow(3u8) + z.clone() + P2::one();
+        let by_compare = p.coeff.keys().cloned()
+            .fold(Monomial::one(), |best, m| if best.compare(&m) == Less { m } else { best });
+        assert_eq!(p.leading_mon(), by_compare);
+        assert_eq!(p.leading_mon(), (y.clone() * z.clone()).leading_mon());
     }
 
     #[test]
