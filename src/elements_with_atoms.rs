@@ -69,7 +69,7 @@ pub trait ElementsWithAtoms<A : AtomsWithOrd> : Clone + Eq {
         }
     }
 
-    /// The elements in the orbit of `rep` that are supported by `support`.
+    /// The elements in the orbit of `rep` whose support is contained in `support`.
     /// Such an element is the image of `rep` under the partial automorphism from
     /// the support of `rep` onto a subset of `support`.
     /// Technically we should compute the algebraic closure of a support,

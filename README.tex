@@ -36,11 +36,13 @@ $ $\\}
 \newcommand{\code}[1]{\texttt{\textcolor{magenta}{#1}}}
 
 \newtheorem{theorem}{Theorem}
+\newtheorem{lemma}[theorem]{Lemma}
 
 \theoremstyle{definition}
 \newtheorem{example}[theorem]{Example}
 \newtheorem{notation}[theorem]{Notation}
 \newtheorem{todo}[theorem]{Todo}
+\newtheorem{remark}[theorem]{Remark}
 %
 \begin{document}
 \maketitle
@@ -101,6 +103,13 @@ then an automorphism of $\struct$ is an isomorphism of the graph with itself.
 \end{example}
 %
 The set of automorphisms of a relational structure $\struct$ is denoted as \emphdef{$\mathbf{Aut}(\struct)$}.
+The group $\aut{\struct}$ acts on $\struct^n$ coordinatewise:
+$\pi(x_1,\dots,x_n) = (\pi(x_1),\dots,\pi(x_n))$.
+The \emphdef{orbit} of an element $x$ of a set on which $\aut{\struct}$ acts is the set $\setof{\pi(x)}{\pi\in\aut{\struct}}$.
+%
+\begin{example}
+In $\dloQ$, the orbit of $(1,2)\in\dloQ^2$ is $\setof{(a,b)\in\dloQ^2}{a<b}$.
+\end{example}
 %
 \section{Oligomorphic structures}
 %
@@ -236,11 +245,33 @@ They show that this algorithm terminates when $\struct$ is a ordered relational 
 %
 The implementation is divided into three parts.
 The first part gives a \emph{framework} to write equivariant algorithms.
-The second part is a simple implementation of polynomial rings $\poly{\Q}{\struct}$ where $\struct$ can be any arbitrary data-type.
+The second part is a simple implementation of polynomial rings $\poly{\F}{X}$ over a field $\F$,
+where the variables can be of any ordered data type.
 The third part combines these two and implements the equivariant Buchberger's algorithm.
 
-The work regarding the third is still in progress,
+The work regarding the third part is still in progress,
 so we omit the details of this part.
+%
+\section{Building and testing}
+%
+The polynomial rings and the Gr\"{o}bner bases are built and tested with
+\begin{verbatim}
+cargo build
+cargo test
+\end{verbatim}
+The framework for equivariant algorithms is only built with the Cargo feature \code{equivariant},
+because it depends on the crate \code{rug}, which compiles the GMP library:
+\begin{verbatim}
+cargo test --features equivariant
+\end{verbatim}
+The example \code{groebner\_stdin} reads polynomials from the standard input
+and prints the reduced Gr\"{o}bner basis of the ideal that they generate.
+For instance,
+\begin{verbatim}
+echo "x*y; x + y*z" | cargo run --example groebner_stdin -- f2
+\end{verbatim}
+prints the reduced Gr\"{o}bner basis $\{x^2, xy, x + yz\}$ over the field with two elements.
+The script \code{scripts/compare\_with\_sympy.py} compares the output of this example with SymPy on random inputs.
 %
 \section{Framework for equivariant algorithms}
 %
@@ -259,15 +290,72 @@ However, since we only deal with equivariant orbits as of now,
 orbits of orbits are singleton.
 \arka{This is schizophrenic}}
 %
+\subsection{Supports and equivariance}
+%
+In this chapter, the relational structure $\struct$ is ordered,
+that is, one of its relations is a linear order on $\struct$.
+We call the elements of $\struct$ \emphdef{atoms}.
+The group $\aut{\struct}$ acts on finite sets of atoms, on pairs, on lists and on polynomials
+by applying the automorphism to every atom that occurs.
+
+The \emphdef{support} $\mathsf{supp}(b)$ of an element $b$ is the set of atoms that occur in $b$.
+A finite set $S$ of atoms \emphdef{supports} $b$ if $\pi(b) = b$ for every automorphism $\pi$ that fixes every element of $S$.
+For all the elements in the implementation,
+the support $\mathsf{supp}(b)$ supports $b$,
+and $\mathsf{supp}(\pi(b)) = \pi(\mathsf{supp}(b))$ for every automorphism $\pi$.
+%
+\begin{example}
+Let $a < b < c$ be atoms of $\dloQ$.
+The support of the polynomial $a^2c + b$ is $\{a,b,c\}$,
+and the support of the pair $(a,\{b,c\})$ is also $\{a,b,c\}$.
+\end{example}
+%
+A function $f$ is \emphdef{equivariant} if $f(\pi(b)) = \pi(f(b))$ for every automorphism $\pi$ and every $b$ in the domain of $f$.
+A predicate $p$, that is, a function with values true and false, is \emphdef{equivariant} if $p(\pi(b)) = p(b)$ for every automorphism $\pi$ and every $b$ in the domain of $p$.
+%
+\begin{example}
+On pairs of atoms of $\dloQ$,
+the function $(a,b)\mapsto a$ and the predicate $(a,b)\mapsto (a = b)$ are equivariant.
+The constant function $(a,b)\mapsto 1$, where $1$ is the rational number one, is not equivariant,
+because some automorphism $\pi$ satisfies $\pi(1) \neq 1$.
+\end{example}
+%
+Let $S$ and $T$ be finite sets of atoms such that some automorphism $\pi$ maps $S$ onto $T$.
+Since $\pi$ preserves the order,
+$\pi$ maps the $i$-th smallest element of $S$ to the $i$-th smallest element of $T$, for every $i$.
+So all automorphisms that map $S$ onto $T$ agree on $S$.
+Their common restriction to $S$ is the \emphdef{partial automorphism} from $S$ onto $T$
+(\code{PartialAut} in the code).
+%
+\begin{example}
+In $\dloQ$, the partial automorphism from $\{1,2\}$ onto $\{5,9\}$ maps $1$ to $5$ and $2$ to $9$.
+\end{example}
+%
+\begin{remark}\label{rem:paut}
+The image $\pi(b)$ of an element $b$ only depends on the restriction of $\pi$ to $\mathsf{supp}(b)$.
+Indeed, if two automorphisms $\pi$ and $\pi'$ agree on $\mathsf{supp}(b)$,
+then $\pi'^{-1}\pi$ fixes every element of $\mathsf{supp}(b)$.
+Since $\mathsf{supp}(b)$ supports $b$, we get $\pi'^{-1}\pi(b) = b$, that is, $\pi(b) = \pi'(b)$.
+So $\pi(b)$ can be computed from the partial automorphism from $\mathsf{supp}(b)$ onto $\pi(\mathsf{supp}(b))$.
+\end{remark}
+%
 \subsection{\code{trait AtomsWithOrd}}
 %
-This gives the framework for working with \emph{computationally oligomorphic relational structures}.
+This gives the framework for working with \emph{computationally oligomorphic} ordered relational structures.
 To make a \code{struct A} satisfy this \code{trait},
 one has to implement two basic operations.
 \begin{enumerate}
-\item \code{in\_same\_orbit}: This function checks if two \code{BTreeSet<A>} are in the same orbit.
-\item \code{orbits\_in\_product} : This functions takes two orbits $B$ and $C$ of \code{BTreeSet<A>} as input and outputs the orbits of \code{(BTreeSet<A>,BTreeSet<A>)} in $B\times C$. 
+\item \code{in\_same\_orbit(S, T)}: This function checks whether some automorphism maps the finite set \code{S : BTreeSet<A>} onto the finite set \code{T : BTreeSet<A>}.
+\item \code{orbits\_in\_product(S, T)}: This function returns one representative $(S', T')$ for each orbit of pairs in the product of the orbit of \code{S} and the orbit of \code{T}.
 \end{enumerate}
+%
+\begin{example}
+In $\dloQ$, two finite sets are in the same orbit if and only if they have the same size,
+because every order-preserving bijection between finite subsets of $\dloQ$ extends to an automorphism.
+For $S = T = \{1\}$, the function \code{orbits\_in\_product} returns the three pairs
+$(\{1\},\{1\})$, $(\{1\},\{2\})$ and $(\{2\},\{1\})$.
+They represent the three orbits of pairs $(\{a\},\{b\})$ with $a = b$, $a < b$ and $a > b$.
+\end{example}
 %
 \subsubsection{Defining relational structures}
 %
@@ -277,7 +365,7 @@ Our recommended way of defining a relational structure is to use a wrapper class
 For illustration we define \code{DLO} as
 \color{magenta}
 \begin{verbatim}
-#[derive(PartialEq, PartialOrd,Eq,Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DLO {
     val : Rational
 }
@@ -298,55 +386,89 @@ let z : DLO = DLO::new(r);
 %
 \subsection{\code{trait ElementsWithAtoms<A>}}
 %
-This is the \code{trait} for elements of orbits constructed from the atoms \code{A}.
+This is the \code{trait} for elements built from the atoms \code{A}.
 To implement this \code{trait} for a \code{struct B} one has to implement the following functions.
 \begin{enumerate}
-\item \code{support()}: This computes the support of an element.
-\item \code{project\_to\_support(X : Orbit<A,B>, S : BTreeSet<A>)}: This takes an orbit \code{X} inside \code{B} finite subset of elements of \code{A} as inputs and outputs all elements in \code{X} that are supported by \code{S}.
+\item \code{support()}: This computes the support of an element, as a \code{BTreeSet<A>}.
+\item \code{apply\_paut(paut)}: This applies a partial automorphism whose domain contains the support of the element.
 \end{enumerate}
+The \code{trait} then provides the following functions.
+\begin{enumerate}
+\item \code{tuples\_in\_same\_orbit(first, second)}: This checks whether some automorphism maps the list \code{first} to the list \code{second}.
+By \Cref{rem:paut}, it suffices to try the partial automorphism from the support of \code{first} onto the support of \code{second}.
+\item \code{project\_to\_support(rep, S)}: This outputs all elements in the orbit of \code{rep} whose support is contained in \code{S : BTreeSet<A>}.
+By \Cref{rem:paut}, these are the images of \code{rep} under the partial automorphisms from the support of \code{rep} onto subsets of \code{S}.
+\end{enumerate}
+The \code{trait} is implemented for atoms (\code{DLO}), finite sets of atoms (\code{BTreeSet<A>}),
+pairs \code{(B, C)} and lists \code{Vec<B>}.
 %
 \subsection{\code{struct Orbit<A,B>}}
 %
 This is the structure of orbits of elements of another \code{struct B} under the action of the automorphism group of another \code{struct A}.
-An object is given by its representative \code{rep}.
-This field is kept private.
-This is necessary to ensure that any function that takes orbits as input is equivariant.
-%
-\arka{we have to add definition of equivariance and explain it}
-%
-An object of the \code{struct} \code{orbit} is given by its representative \code{rep} which must satisfy the \code{trait} \code{ElementsWithAtoms}.
-The \code{rep} field is hidden,
-this ensures that orbits can only be accessed in specific ways (explained below) that preserves equivariance.
+An object of the \code{struct} \code{Orbit} is given by its representative \code{rep},
+which must satisfy the \code{trait} \code{ElementsWithAtoms}.
+The \code{rep} field is hidden.
+This ensures that orbits can only be accessed in specific ways (explained below) that preserve equivariance.
 
 Orbits are considered as lists indexed by elements of
 \code{BTreeSet<A : AtomsWithOrd>}.
-This is consistent with the theoretical result that every orbit of set with atoms $\struct$ is isomorphic to an equivariant subset of $\binom{\struct}{n}$ for some $n\in\N$,
+This is consistent with the theoretical result that every orbit of set with atoms $\struct$ is isomorphic to an equivariant subset of $\binom{\struct}{n}$ for some $n\in\N$.
 Orbits can be accessed in the following ways:
 \begin{enumerate}
-\item Given two orbits $B$ and $C$, one can check if they are equal.
-\item Given an orbit $B$ and \code{S : BTreeSet<A>} one can compute the elements in the orbit supported by \code{S}.
-\item Given two orbits $B$ and $C$, one can compute the list of orbits in the product $B\times C$.
+\item Given two orbits $B$ and $C$, one can check if they are equal (\code{==}).
+\item Given an orbit $B$ and \code{S : BTreeSet<A>}, one can compute the elements of $B$ whose support is contained in \code{S} (\code{supported\_by}).
+\item Given two orbits $B$ and $C$, one can compute the list of orbits in the product $B\times C$ (\code{product}).
 \item Given an equivariant function $f$ with domain containing $B$,
-one can compute $f(B)$ by applying \code{map}.
-\item Given an equivariant function $f$ with domain containing $B$ and boolean output,
-one can filter $B$ using $f$.
+one can compute $f(B)$ (\code{map}).
+\item Given an equivariant predicate $f$ with domain containing $B$,
+one can filter $B$ using $f$ (\code{filter}).
 Observe that since $f$ is equivariant, this means the result of the filtering is either $B$ or $\emptyset$.
 \end{enumerate}
 The reason behind doing the above is the following.
 First, we ensure that any function with input and output types satisfying the trait \code{ElementsWithAtoms} is equivariant.
 Second, we ensure that orbits can only be accessed in specific ways that preserves equivariance.
 As a consequence, any function that takes orbits as input must be equivariant.
+
+The function \code{product} relies on the following lemma.
+It computes, for each representative pair $(S',T')$ that \code{orbits\_in\_product} returns for the supports of the representatives $b$ and $c$,
+the pair of images of $b$ and $c$ under the partial automorphisms onto $S'$ and $T'$.
+%
+\begin{lemma}\label{lem:product}
+Let $b$ and $c$ be elements, and let $\pi$, $\pi'$, $\sigma$ and $\sigma'$ be automorphisms.
+The pairs $(\pi(b),\sigma(c))$ and $(\pi'(b),\sigma'(c))$ are in the same orbit
+if and only if the pairs $(\pi(\mathsf{supp}(b)),\sigma(\mathsf{supp}(c)))$ and $(\pi'(\mathsf{supp}(b)),\sigma'(\mathsf{supp}(c)))$ are in the same orbit.
+\end{lemma}
+\begin{proof}
+We first show the forward implication.
+Let $\rho$ be an automorphism that maps $(\pi(b),\sigma(c))$ to $(\pi'(b),\sigma'(c))$.
+Since $\mathsf{supp}(\rho(\pi(b))) = \rho(\mathsf{supp}(\pi(b)))$,
+the automorphism $\rho$ maps $\mathsf{supp}(\pi(b)) = \pi(\mathsf{supp}(b))$ onto $\mathsf{supp}(\pi'(b)) = \pi'(\mathsf{supp}(b))$.
+Symmetrically, $\rho$ maps $\sigma(\mathsf{supp}(c))$ onto $\sigma'(\mathsf{supp}(c))$.
+
+We now show the backward implication.
+Let $\rho$ be an automorphism that maps $\pi(\mathsf{supp}(b))$ onto $\pi'(\mathsf{supp}(b))$ and $\sigma(\mathsf{supp}(c))$ onto $\sigma'(\mathsf{supp}(c))$.
+The automorphism $\tau = \pi'^{-1}\rho\pi$ maps $\mathsf{supp}(b)$ onto itself.
+Since $\tau$ preserves the order and $\mathsf{supp}(b)$ is finite,
+$\tau$ fixes every element of $\mathsf{supp}(b)$.
+Since $\mathsf{supp}(b)$ supports $b$, we get $\tau(b) = b$, that is, $\rho(\pi(b)) = \pi'(b)$.
+Symmetrically, $\rho(\sigma(c)) = \sigma'(c)$.
+So $\rho$ maps $(\pi(b),\sigma(c))$ to $(\pi'(b),\sigma'(c))$.
+\end{proof}
 %
 \section{Polynomial rings}
 %
 The file \code{mon.rs} implements polynomials and basic operations on them.
+A polynomial of type \code{Polynomial<F,X>} has coefficients of type \code{F},
+which must be a field,
+and variables of type \code{X}, which must be ordered.
+For instance, \code{F} can be the field \code{F2} with two elements from \code{bits.rs},
+or the field \code{BigRational} of rational numbers from the crate \code{num-rational}.
 The standard way to define a polynomial is to first define the variables.
 For instance, the code below show how to define a variable with type \code{String},
 \[
 \text{\code{let x : Polynomial<F2,String> = Polynomial::var("x".to\_string());}}
 \]
 \arka{this needs to clearer and more detailed}
-Here $F2$ is the finite field with two elements.
 Variables themselves are considered as polynomials.
 Once we have defined variables $y$ and $z$ in a similar manner,
 the polynomial $f = x + yz$ can be defined as
@@ -355,22 +477,34 @@ the polynomial $f = x + yz$ can be defined as
 \] 
 The \code{.clone()} is needed to ensure that the variables can be reused.
 All the usual operations (addition, subtraction, multiplication, powering) of polynomials are defined in \code{mon.rs}.
+Exponents are of type \code{Exponent}, which is \code{u32}.
 
 The only important thing to note here is that monomials are compared lexicographically,
 with the largest variable as the most significant one:
 two monomials are compared by their exponents of the largest variable at which they differ.
 For instance, $x^5 < y$ when $x < y$.
+
+The file also implements the reduction of polynomials:
+\code{reduce\_by} performs one reduction step of the leading term,
+\code{remainder} repeats such steps until no reducer applies to the leading term,
+and \code{normal\_form} computes the remainder of the division algorithm,
+in which no monomial is divisible by the leading monomial of a reducer.
 %
 \subsection{Polynomial ideals}
 %
 Polynomials ideals are implemented in \code{ideal.rs}.
-An ideal is defined as a \code{struct} containing a set of its generators.
-At this point the only functions implemented is \code{buchberger},
-which as the name suggests,
-implements the Buchberger's algorithm.
+The function \code{buchberger} computes the reduced Gr\"{o}bner basis of the ideal generated by a list of polynomials.
+It implements Buchberger's algorithm with Buchberger's two criteria as in \cite[Chapter 2, \S10]{CLO15},
+with the normal selection strategy.
 
-The next steps would be implement ideal membership, equality checking of ideals,
-computation of sum, product and quotients.
+An ideal (\code{struct Ideal}) is stored by its reduced Gr\"{o}bner basis.
+Since the reduced Gr\"{o}bner basis of an ideal is unique,
+two ideals are equal if and only if their stored bases are equal.
+The following operations are implemented:
+membership (\code{contains}), inclusion (\code{is\_subset}), equality (\code{==}),
+sum (\code{sum}) and product (\code{product}).
+
+The next steps would be to implement quotients and intersections of ideals.
 %
 \begin{thebibliography}{9}
 \bibitem{GL24}
@@ -379,6 +513,9 @@ Arka Ghosh and S\l{}awomir Lasota. Equivariant ideals of polynomials, LICS 2024.
 \bibitem{GL25}
 Arka Ghosh and Aliaume Lopez. Computability of equivariant
 Gr\"{o}bner bases, 2025.
+%
+\bibitem{CLO15}
+David A. Cox, John Little and Donal O'Shea. Ideals, Varieties, and Algorithms, 4th edition. Springer, 2015.
 %
 \end{thebibliography}
 %

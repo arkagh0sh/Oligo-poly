@@ -41,7 +41,7 @@ impl<A : AtomsWithOrd, B : ElementsWithAtoms<A>> Orbit<A, B> {
         Orbit { rep, atoms : PhantomData }
     }
 
-    /// The elements of the orbit that are supported by `support`.
+    /// The elements of the orbit whose support is contained in `support`.
     pub fn supported_by(&self, support : &BTreeSet<A>) -> Vec<B> {
         B::project_to_support(&self.rep, support)
     }
