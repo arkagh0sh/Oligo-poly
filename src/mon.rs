@@ -365,6 +365,8 @@ impl<F : AddAssign + Default + Mul<Output = F> + Clone + Zero, X : Clone + Ord +
                 result.coeff.entry(p1.clone()*p2.clone()).or_default().add_assign(r1.clone() * r2.clone());
             }
         }
+        // Terms may cancel, e.g. (x + y)(x + y) = x^2 + y^2 over F2.
+        result.coeff.retain(|_, c| !c.is_zero());
         result
     }
 }
@@ -523,6 +525,18 @@ mod tests {
         let r = (y.clone() * y.clone() + x.clone()).remainder(&reducers);
         assert_eq!(r, x.clone() * x.clone() + x.clone());
         assert!(reducers.iter().all(|h| !r.is_reducible_by(h)));
+    }
+
+    #[test]
+    fn products_have_no_zero_coefficients() {
+        let (x, y) = (v2("x"), v2("y"));
+        let p = (x.clone() + y.clone()) * (x.clone() + y.clone());
+        assert_eq!(p, x.clone() * x.clone() + y.clone() * y.clone());
+        let q = (qv("x") + qv("y")) * (qv("x") - qv("y"));
+        assert_eq!(q, qv("x") * qv("x") - qv("y") * qv("y"));
+        // (x + 1)(x - 1) - (x^2 - 1) is the zero polynomial.
+        let d = (qv("x") + qc(1, 1)) * (qv("x") - qc(1, 1)) - (qv("x") * qv("x") - qc(1, 1));
+        assert!(d.is_zero());
     }
 
     #[test]
