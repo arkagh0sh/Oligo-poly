@@ -303,20 +303,24 @@ impl<F : AddAssign + Default + Eq + Zero + ConstOne + Clone, X : Hash + Ord + Cl
         f - g
     }
 
-    pub fn remainder(self, reducers : &Vec<Polynomial<F,X>>) -> Polynomial<F,X>
+    /// Applies top-reduction steps by the `reducers` until none applies, that is,
+    /// until a whole pass over the reducers leaves the polynomial unchanged.
+    /// The leading monomial of the result is not divisible by the leading
+    /// monomial of any non-zero reducer.
+    pub fn remainder(self, reducers : &[Polynomial<F,X>]) -> Polynomial<F,X>
     where
-      F : Neg<Output = F> + Div<Output = F> + Display,
-      X : Display
+      F : Neg<Output = F> + Div<Output = F>
     {
         let mut post = self;
-        let mut pre = Polynomial::zero();
-        while pre != post {
+        loop {
+            let pre = post.clone();
             for reducer in reducers.iter() {
-                pre = post.clone();
                 post = post.reduce_by(reducer);
-            }  
+            }
+            if post == pre {
+                return post;
+            }
         }
-        post
     }
 }
 
@@ -508,5 +512,22 @@ mod tests {
         let f = qc(3, 1) * x.clone() * x.clone() + qc(1, 1);
         let g = qc(2, 1) * x.clone() + qc(1, 1);
         assert_eq!(f.reduce_by(&g), qc(-3, 2) * x.clone() + qc(1, 1));
+    }
+
+    #[test]
+    fn remainder_reduces_until_no_reducer_applies() {
+        let (x, y, z) = (v2("x"), v2("y"), v2("z"));
+        let g = y.clone() + x.clone();
+        let reducers = vec![g.clone(), z.clone()];
+        // y^2 + x -> xy + x -> x^2 + x (the last reducer z never applies).
+        let r = (y.clone() * y.clone() + x.clone()).remainder(&reducers);
+        assert_eq!(r, x.clone() * x.clone() + x.clone());
+        assert!(reducers.iter().all(|h| !r.is_reducible_by(h)));
+    }
+
+    #[test]
+    fn remainder_with_no_reducers() {
+        let x = v2("x");
+        assert_eq!(x.clone().remainder(&[]), x);
     }
 }
