@@ -27,3 +27,7 @@ required-features = ["equivariant"]
 [[example]]
 name = "elimination_comparison"
 required-features = ["equivariant"]
+
+[[example]]
+name = "elimination_scaling"
+required-features = ["equivariant"]

@@ -61,6 +61,16 @@ correct on every example: 300 random ideals in 3, 4 and 5 variables
 the ideals of `equivariant_demo` over (Q, <) and over trees. It is often much
 faster than the full trick.
 
+The example `elimination_scaling` compares the elimination method with the
+one-colour trick (and optionally the other methods) on random ideals with more
+variables. Each method runs on each ideal in a child process with a time
+limit, and the property of every basis is checked against the elimination
+bases.
+
+```sh
+cargo run --release --features equivariant --example elimination_scaling -- --vars 5,6,7 --count 10 --timeout 60
+```
+
 ## Examples
 
 ### Gröbner bases
