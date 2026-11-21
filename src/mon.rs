@@ -246,18 +246,12 @@ impl<F : AddAssign + Default + Eq + Zero + ConstOne + Clone, X : Hash + Ord + Cl
         Polynomial::new(vec![(lm,lc)])
     }
 
+    /// Whether `self` is top-reducible by `other`: both are non-zero and the
+    /// leading monomial of `other` divides the leading monomial of `self`.
     pub fn is_reducible_by(&self, other : &Polynomial<F,X>) -> bool {
-        if self.is_zero() || other.is_zero() {
-            false
-        } else if other.domain().is_subset(&self.domain()) {
-            if self.leading_mon().is_divisible_by(&other.leading_mon()) {
-                true
-            } else {
-                false
-            }
-        } else {
-            false
-        }
+        !self.is_zero()
+            && !other.is_zero()
+            && self.leading_mon().is_divisible_by(&other.leading_mon())
     }
 
     /// One top-reduction step: if `self` is reducible by `other`, cancel the
@@ -537,6 +531,18 @@ mod tests {
         // (x + 1)(x - 1) - (x^2 - 1) is the zero polynomial.
         let d = (qv("x") + qc(1, 1)) * (qv("x") - qc(1, 1)) - (qv("x") * qv("x") - qc(1, 1));
         assert!(d.is_zero());
+    }
+
+    #[test]
+    fn reducibility_only_depends_on_leading_monomials() {
+        let (x, y) = (v2("x"), v2("y"));
+        let f = y.clone() * y.clone();
+        let g = y.clone() + x.clone();
+        // LM(y + x) = y divides LM(y^2) = y^2, although x does not occur in y^2.
+        assert!(f.is_reducible_by(&g));
+        assert_eq!(f.reduce_by(&g), x.clone() * y.clone());
+        assert!(!x.is_reducible_by(&g));
+        assert!(!x.is_reducible_by(&P2::zero()));
     }
 
     #[test]
