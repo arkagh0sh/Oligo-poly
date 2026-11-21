@@ -18,3 +18,5 @@ pub mod dlo;
 pub mod elements_with_atoms;
 #[cfg(feature = "equivariant")]
 pub mod equivariant;
+#[cfg(feature = "equivariant")]
+pub mod tree;
