@@ -318,6 +318,41 @@ impl<F : AddAssign + Default + Eq + Zero + ConstOne + Clone, X : Hash + Ord + Cl
         f - g
     }
 
+    /// The normal form of `self` with respect to `reducers`: the remainder of the
+    /// division algorithm. No monomial of the result is divisible by the leading
+    /// monomial of a non-zero reducer.
+    pub fn normal_form(self, reducers : &[Polynomial<F,X>]) -> Polynomial<F,X>
+    where
+      F : Neg<Output = F> + Div<Output = F>
+    {
+        let mut p = self;
+        let mut r : Polynomial<F,X> = Polynomial::zero();
+        while let Some(m) = p.coeff.keys().next_back().cloned() {
+            match reducers.iter().find(|g| !g.is_zero() && m.is_divisible_by(&g.leading_mon())) {
+                Some(g) => p = p.reduce_by(g),
+                None => {
+                    // The leading term of p is irreducible: move it to the remainder.
+                    let (m, c) = p.coeff.pop_last().unwrap();
+                    r.coeff.insert(m, c);
+                }
+            }
+        }
+        r
+    }
+
+    /// The polynomial divided by its leading coefficient (zero stays zero).
+    pub fn monic(self) -> Polynomial<F,X>
+    where
+      F : Div<Output = F>
+    {
+        if self.is_zero() {
+            self
+        } else {
+            let c = F::one() / self.leading_coeff();
+            Polynomial::constant(c) * self
+        }
+    }
+
     /// Applies top-reduction steps by the `reducers` until none applies, that is,
     /// until a whole pass over the reducers leaves the polynomial unchanged.
     /// The leading monomial of the result is not divisible by the leading

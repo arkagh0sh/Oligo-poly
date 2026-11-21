@@ -61,7 +61,7 @@ X : Ord + Hash + Clone + Display>
         if chain_criterion(i, j, &pairs, &basis) {
             continue;
         }
-        let r = basis[i].clone().syzygy(&basis[j]).remainder(&basis);
+        let r = basis[i].clone().syzygy(&basis[j]).normal_form(&basis);
         if !r.is_zero() {
             let k = basis.len();
             basis.push(r);
@@ -70,8 +70,38 @@ X : Ord + Hash + Clone + Display>
             }
         }
     }
-    let basis_set : BTreeSet<Polynomial<F,X>> = basis.into_iter().collect();
-    basis_set.into_iter().collect()
+    reduce_groebner_basis(basis)
+}
+
+/// Turns a Gröbner basis into the reduced Gröbner basis of the same ideal:
+/// removes the elements whose leading monomial is divisible by the leading
+/// monomial of another element, replaces each remaining element by its normal
+/// form with respect to the others, and makes it monic.
+/// The result is sorted, so equal ideals give equal results.
+pub fn reduce_groebner_basis<
+F : AddAssign + Clone + ConstOne + Default + Zero + Eq + Div<Output = F> + Neg<Output = F> + Ord,
+X : Ord + Hash + Clone>
+(basis : Vec<Polynomial<F,X>>) -> Vec<Polynomial<F,X>> {
+    let mut sorted : Vec<Polynomial<F,X>> = basis.into_iter().filter(|g| !g.is_zero()).collect();
+    // A divisor of a monomial is smaller in any monomial order, so after sorting
+    // every possible divisor of a leading monomial comes first.
+    sorted.sort_by_key(|g| g.leading_mon());
+    let mut minimal : Vec<Polynomial<F,X>> = Vec::new();
+    for g in sorted {
+        if !minimal.iter().any(|h| g.leading_mon().is_divisible_by(&h.leading_mon())) {
+            minimal.push(g);
+        }
+    }
+    let reduced : BTreeSet<Polynomial<F,X>> = (0..minimal.len())
+        .map(|i| {
+            let others : Vec<Polynomial<F,X>> = minimal.iter().enumerate()
+                .filter(|&(j, _)| j != i)
+                .map(|(_, h)| h.clone())
+                .collect();
+            minimal[i].clone().normal_form(&others).monic()
+        })
+        .collect();
+    reduced.into_iter().collect()
 }
 
 /// Normal selection strategy: a pair whose leading monomials have the smallest lcm.
@@ -134,5 +164,25 @@ mod tests {
         let basis = buchberger(vec![x.clone() * y.clone(), x.clone() + y.clone() * z.clone()]);
         assert!(is_groebner_basis(&basis));
         assert!(basis.contains(&(x.clone() * x.clone())));
+        // The reduced Gröbner basis is {x^2, xy, x + yz}.
+        let mut expected = vec![x.clone() * x.clone(), x.clone() * y.clone(), x.clone() + y.clone() * z.clone()];
+        expected.sort();
+        assert_eq!(basis, expected);
+    }
+
+    #[test]
+    fn reduced_basis_over_q() {
+        use num_rational::Rational64 as Q;
+        let v = |n : &str| -> Polynomial<Q, String> { Polynomial::var(n.to_string()) };
+        let c = |k : i64| -> Polynomial<Q, String> { Polynomial::constant(Q::from_integer(k)) };
+        let (x, y) = (v("x"), v("y"));
+        // <2x - y, x^2 - 1> with y > x: y = 2x, so the reduced basis is {y - 2x, x^2 - 1}.
+        let basis = buchberger(vec![c(2) * x.clone() - y.clone(), x.clone() * x.clone() - c(1)]);
+        let mut expected = vec![y.clone() - c(2) * x.clone(), x.clone() * x.clone() - c(1)];
+        expected.sort();
+        assert_eq!(basis, expected);
+        // The same ideal from other generators gives the same reduced basis.
+        let other = buchberger(vec![y.clone() * y.clone() - c(4), y.clone() - c(2) * x.clone()]);
+        assert_eq!(other, expected);
     }
 }
