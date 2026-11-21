@@ -14,3 +14,6 @@ num-traits = "0.2"
 rug = { version = "1.27", optional = true }
 sorted-iter = "0.1.11"
 contracts = "0.6"
+
+[dev-dependencies]
+num-rational = "0.4"

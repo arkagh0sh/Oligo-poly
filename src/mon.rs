@@ -247,7 +247,7 @@ impl<F : AddAssign + Default + Eq + Zero + ConstOne + Clone, X : Hash + Ord + Cl
     }
 
     pub fn is_reducible_by(&self, other : &Polynomial<F,X>) -> bool {
-        if self.is_zero() {
+        if self.is_zero() || other.is_zero() {
             false
         } else if other.domain().is_subset(&self.domain()) {
             if self.leading_mon().is_divisible_by(&other.leading_mon()) {
@@ -260,15 +260,18 @@ impl<F : AddAssign + Default + Eq + Zero + ConstOne + Clone, X : Hash + Ord + Cl
         }
     }
 
+    /// One top-reduction step: if `self` is reducible by `other`, cancel the
+    /// leading term of `self` with the multiple (LT(self) / LT(other)) * other.
     pub fn reduce_by(self, other : &Polynomial<F,X>) -> Polynomial<F,X>
     where
-      F : Neg<Output = F>
+      F : Neg<Output = F> + Div<Output = F>
     {
         if  self.is_reducible_by(other) {
-            let quotient: Polynomial<F,X> = Polynomial::from_mon(self.leading_mon() / other.leading_mon());
-            return (self - quotient * other.clone());
+            let coeff = self.leading_coeff() / other.leading_coeff();
+            let quotient: Polynomial<F,X> = Polynomial::new(vec![(self.leading_mon() / other.leading_mon(), coeff)]);
+            self - quotient * other.clone()
         } else {
-            return self;
+            self
         }
     }
 
@@ -302,7 +305,7 @@ impl<F : AddAssign + Default + Eq + Zero + ConstOne + Clone, X : Hash + Ord + Cl
 
     pub fn remainder(self, reducers : &Vec<Polynomial<F,X>>) -> Polynomial<F,X>
     where
-      F : Neg<Output = F> + Display,
+      F : Neg<Output = F> + Div<Output = F> + Display,
       X : Display
     {
         let mut post = self;
@@ -482,3 +485,28 @@ impl<F : Neg<Output = F> + Clone + AddAssign + Default + Zero + Ord + ConstOne, 
 //                 return self.clone();
 //     }
 // }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bits::F2;
+    use num_rational::Rational64 as Q;
+
+    type PQ = Polynomial<Q, String>;
+    type P2 = Polynomial<F2, String>;
+
+    fn qv(name : &str) -> PQ { Polynomial::var(name.to_string()) }
+    fn qc(num : i64, den : i64) -> PQ { Polynomial::constant(Q::new(num, den)) }
+    fn v2(name : &str) -> P2 { Polynomial::var(name.to_string()) }
+
+    #[test]
+    fn reduce_by_uses_leading_coefficients() {
+        let x = qv("x");
+        // x reduced by 2x is 0.
+        let two_x = qc(2, 1) * x.clone();
+        assert!(x.clone().reduce_by(&two_x).is_zero());
+        // 3x^2 + 1 reduced by 2x + 1 is -3/2 x + 1.
+        let f = qc(3, 1) * x.clone() * x.clone() + qc(1, 1);
+        let g = qc(2, 1) * x.clone() + qc(1, 1);
+        assert_eq!(f.reduce_by(&g), qc(-3, 2) * x.clone() + qc(1, 1));
+    }
+}
