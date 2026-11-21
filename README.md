@@ -14,13 +14,17 @@ A. Ghosh and A. Lopez, *Computability of equivariant Gröbner bases* (2025).
   with the dense linear order (Q, <) as the first example
   (`src/atoms.rs`, `src/elements_with_atoms.rs`, `src/dlo.rs`).
   It is only built with the Cargo feature `equivariant`.
-- The equivariant Buchberger algorithm is in progress.
+- A first version of the equivariant Buchberger algorithm, in which a polynomial f
+  is only reduced by elements h with supp(h) ⊆ supp(f) (`src/equivariant.rs`,
+  example `equivariant_demo`). It is not complete yet: see the ignored test
+  `membership_with_three_atoms`.
 
 ## Building and testing
 
 ```sh
 cargo test
 cargo test --features equivariant   # builds the crate rug, which compiles GMP
+cargo run --release --features equivariant --example equivariant_demo
 ```
 
 ## Example
