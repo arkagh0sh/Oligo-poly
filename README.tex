@@ -581,6 +581,27 @@ The example \code{equivariant\_demo} runs both functions on several ideals.
 The colouring multiplies the number of generators by up to $2^n$,
 where $n$ is the size of their supports, so it is slower.
 %
+\paragraph{Finitely many variables.}
+The file \code{trivial.rs} defines variables $x_1, x_2, \dots$ whose only automorphism is the identity.
+For an ideal $I$ of $\poly{\F}{x_1, \dots, x_n}$,
+an equivariant Gr\"{o}bner basis for the trivial group is a basis $B$ such that,
+for every set $V$ of variables, the elements of $B$ in $\poly{\F}{X_V}$
+form a Gr\"{o}bner basis of the elimination ideal $I \cap \poly{\F}{X_V}$.
+Indeed, if $f \in I \cap \poly{\F}{X_V}$, the element $h$ given by the definition satisfies
+$\mathsf{supp}(h) \subseteq \mathsf{supp}(f) \subseteq V$;
+conversely, apply the property for $V = \mathsf{supp}(f)$.
+By the Elimination Theorem \cite[Chapter 3, \S1]{CLO15},
+an ordinary Gr\"{o}bner basis has this property for $V = \{x_1, \dots, x_k\}$,
+because the largest variable of a monomial is its most significant one,
+but not for every $V$:
+for $I = \idGen{x_2 - x_1, x_1^2}$, the reduced Gr\"{o}bner basis is $\{x_2 - x_1, x_1^2\}$,
+but $x_2^2 = (x_2 + x_1)(x_2 - x_1) + x_1^2 \in I$.
+The function \code{elimination\_ideal} in \code{ideal.rs} computes the reduced Gr\"{o}bner basis of $I \cap \poly{\F}{X_V}$
+with an elimination order, and the example \code{elimination\_comparison} compares three methods:
+the ordinary Gr\"{o}bner basis,
+the union of the reduced Gr\"{o}bner bases of the $2^n$ elimination ideals,
+and the colouring.
+%
 \section{Dense meet-trees}\label{sec:trees}
 %
 The file \code{tree.rs} implements the atoms of the universal countable dense meet-tree with a lexicographic order,

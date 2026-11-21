@@ -39,6 +39,18 @@ Gröbner basis, which is a Gröbner basis of I ∩ K[X_S]. It reports the times,
 the sizes of the bases, and whether the two ideals are equal. Its options are
 described at the top of `examples/finite_comparison.rs`.
 
+The example `elimination_comparison` applies the colouring trick to ideals I
+of K[x1, ..., xn] with the trivial group (`src/trivial.rs`). The result is a
+basis whose elements in K[X_V] form a Gröbner basis of the elimination ideal
+I ∩ K[X_V], for every set V of variables. It compares the trick with the
+ordinary Gröbner basis, which has this property only for V = {x1, ..., xk},
+and with the union of the reduced Gröbner bases of all 2^n elimination ideals
+(`ideal::elimination_ideal`).
+
+```sh
+cargo run --release --features equivariant --example elimination_comparison -- --verbose --ideal "x2 + -1*x1; x1^2"
+```
+
 ## Examples
 
 ### Gröbner bases

@@ -19,3 +19,11 @@ num-rational = "0.4"
 [[example]]
 name = "equivariant_demo"
 required-features = ["equivariant"]
+
+[[example]]
+name = "finite_comparison"
+required-features = ["equivariant"]
+
+[[example]]
+name = "elimination_comparison"
+required-features = ["equivariant"]

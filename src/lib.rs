@@ -20,3 +20,5 @@ pub mod elements_with_atoms;
 pub mod equivariant;
 #[cfg(feature = "equivariant")]
 pub mod tree;
+#[cfg(feature = "equivariant")]
+pub mod trivial;
