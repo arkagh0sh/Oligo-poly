@@ -8,17 +8,21 @@ use num_traits::{Zero, Pow, ConstOne};
 use num_traits::identities::One;
 use super::helpers::*;
 
+/// The type of exponents of variables in monomials.
+pub type Exponent = u32;
+
+/// A monomial, stored as a map from variables to their (non-zero) exponents.
 #[derive(Clone)]
 #[derive(Hash)]
 pub struct Monomial<X> where X : Ord + Clone {
-    expo : BTreeMap<X,u8>
+    expo : BTreeMap<X,Exponent>
 }
 
 impl<X: Hash + Ord + Clone> Monomial<X> {
 
-    fn new(expo_list : Vec<(X,u8)>) -> Monomial<X> {
-        let x: Vec<(X, u8)> = expo_list.into_iter().filter(|&(_, v)| v != 0).collect();
-        let new_expo: BTreeMap<X, u8> = sum_values_by_key(x);
+    fn new(expo_list : Vec<(X,Exponent)>) -> Monomial<X> {
+        let x: Vec<(X, Exponent)> = expo_list.into_iter().filter(|&(_, v)| v != 0).collect();
+        let new_expo: BTreeMap<X, Exponent> = sum_values_by_key(x);
         Monomial {expo : new_expo}
     } 
 
@@ -30,8 +34,8 @@ impl<X: Hash + Ord + Clone> Monomial<X> {
         self.expo.keys().cloned().collect()
     }
 
-    fn exp_of(&self, x : &X) -> u8 {
-        let a: Option<&u8> = self.expo.get(&x);
+    fn exp_of(&self, x : &X) -> Exponent {
+        let a: Option<&Exponent> = self.expo.get(&x);
         match a {
             Some(n) => *n,
             None => 0
@@ -49,7 +53,7 @@ impl<X: Hash + Ord + Clone> Monomial<X> {
     }
 
     pub fn lcm(&self, other : &Monomial<X>) -> Monomial<X> {
-        let mut new_expo : BTreeMap<X,u8> = BTreeMap::new();
+        let mut new_expo : BTreeMap<X,Exponent> = BTreeMap::new();
         let varset = union(self.domain(), other.domain());
         for x in varset {
             new_expo.insert(x.clone(), max(self.exp_of(&x), other.exp_of(&x)));
@@ -107,7 +111,12 @@ impl<X : Clone + Ord + Hash> Mul for Monomial<X> {
     type Output = Self;
 
     fn mul(self, rhs: Self) -> Self {
-        let new_expo: BTreeMap<X, u8> = merge_sum(self.expo, rhs.expo);
+        let mut new_expo: BTreeMap<X, Exponent> = self.expo;
+        for (x, e) in rhs.expo {
+            let entry = new_expo.entry(x).or_insert(0);
+            *entry = entry.checked_add(e).expect("exponent overflow in monomial multiplication");
+        }
+        new_expo.retain(|_, e| *e != 0);
         Monomial {expo : new_expo}
     }
 }
@@ -123,7 +132,10 @@ impl<X : Clone + Ord + Hash> Div for Monomial<X> {
             let mut result = BTreeMap::new();
             for (x, v1) in self.expo.iter() {
                 let new_val = v1 - rhs.exp_of(x);
-                result.insert(x.clone(),new_val);
+                // Keep the representation normalised: no zero exponents.
+                if new_val != 0 {
+                    result.insert(x.clone(),new_val);
+                }
             }
             Monomial {expo : result}
         }
@@ -136,11 +148,21 @@ impl<X : Clone + Ord + Hash> One for Monomial<X> {
     }
 }
 
+impl<X : Clone + Ord + Hash> Pow<Exponent> for Monomial<X> {
+    type Output = Self;
+    fn pow(self, rhs: Exponent) -> Self::Output {
+        let new_expo: BTreeMap<X, Exponent> = self.expo.into_iter()
+            .map(|(k, v)| (k, v.checked_mul(rhs).expect("exponent overflow in monomial power")))
+            .filter(|(_, v)| *v != 0)
+            .collect();
+        Monomial {expo : new_expo}
+    }
+}
+
 impl<X : Clone + Ord + Hash> Pow<u8> for Monomial<X> {
     type Output = Self;
     fn pow(self, rhs: u8) -> Self::Output {
-        let new_expo: BTreeMap<X, u8> = self.expo.iter().map(|(k, v)| (k.clone(), v.clone() * rhs.clone())).collect();
-        Monomial {expo : new_expo}
+        self.pow(Exponent::from(rhs))
     }
 }
 
@@ -378,6 +400,14 @@ impl<F : Clone + AddAssign + Default + One + Eq + Zero + ConstOne,X : Clone + Or
     type Output = Self;
 
     fn pow(self, rhs: u8) -> Self::Output {
+        self.pow(Exponent::from(rhs))
+    }
+}
+
+impl<F : Clone + AddAssign + Default + One + Eq + Zero + ConstOne,X : Clone + Ord + Hash> Pow<Exponent> for Polynomial<F,X> {
+    type Output = Self;
+
+    fn pow(self, rhs: Exponent) -> Self::Output {
         if rhs == 0 {
             Polynomial::one()
         } else if rhs == 1 {
@@ -543,6 +573,24 @@ mod tests {
         assert_eq!(f.reduce_by(&g), x.clone() * y.clone());
         assert!(!x.is_reducible_by(&g));
         assert!(!x.is_reducible_by(&P2::zero()));
+    }
+
+    #[test]
+    fn monomials_stay_normalised() {
+        let x = v2("x");
+        let y = v2("y");
+        // x^2 y / x^2 = y, with no zero exponent left for x.
+        let m = (x.clone() * x.clone() * y.clone()).leading_mon() / (x.clone() * x.clone()).leading_mon();
+        assert_eq!(m, y.leading_mon());
+        assert_eq!(x.leading_mon().pow(0u8), Monomial::one());
+    }
+
+    #[test]
+    fn exponents_above_255() {
+        let x = v2("x");
+        let p = x.clone().pow(200u8) * x.clone().pow(200u8);
+        assert_eq!(p, x.clone().pow(400 as Exponent));
+        assert!(p != x);
     }
 
     #[test]
