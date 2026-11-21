@@ -43,6 +43,13 @@ impl<X: Hash + Ord + Clone> Monomial<X> {
 
     /// The monomial obtained by replacing every variable x by f(x).
     pub fn rename_variables(&self, f : impl Fn(&X) -> X) -> Monomial<X> {
+        self.map_variables(f)
+    }
+
+    /// The monomial obtained by replacing every variable x by f(x), where the new
+    /// variables may have another type. If f is not injective, the exponents of
+    /// the variables with the same image are added.
+    pub fn map_variables<Y : Hash + Ord + Clone>(&self, f : impl Fn(&X) -> Y) -> Monomial<Y> {
         Monomial::new(self.expo.iter().map(|(x, e)| (f(x), *e)).collect())
     }
 
@@ -236,7 +243,14 @@ impl<F : AddAssign + Default + Eq + Zero + ConstOne + Clone, X : Hash + Ord + Cl
 
     /// The polynomial obtained by replacing every variable x by f(x).
     pub fn rename_variables(&self, f : impl Fn(&X) -> X) -> Polynomial<F,X> {
-        Polynomial::new(self.coeff.iter().map(|(m, c)| (m.rename_variables(&f), c.clone())).collect())
+        self.map_variables(f)
+    }
+
+    /// The polynomial obtained by replacing every variable x by f(x), where the
+    /// new variables may have another type. This is a ring morphism: if f is not
+    /// injective, the coefficients of the monomials with the same image are added.
+    pub fn map_variables<Y : Hash + Ord + Clone>(&self, f : impl Fn(&X) -> Y) -> Polynomial<F,Y> {
+        Polynomial::new(self.coeff.iter().map(|(m, c)| (m.map_variables(&f), c.clone())).collect())
     }
 
     /// The set of variables that occur in the polynomial.

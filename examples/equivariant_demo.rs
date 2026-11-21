@@ -5,7 +5,7 @@
 
 use atomic_hilbert::atoms::Orbit;
 use atomic_hilbert::dlo::DLO;
-use atomic_hilbert::equivariant::{equivariant_buchberger, minimal_basis, PolynomialOrbit};
+use atomic_hilbert::equivariant::{equivariant_buchberger, equivariant_groebner_basis, minimal_basis, OrbitList};
 use atomic_hilbert::mon::Polynomial;
 use num_rational::BigRational;
 use num_traits::Pow;
@@ -27,16 +27,23 @@ fn run(name : &str, generators : Vec<P>) {
     for g in &generators {
         println!("  generator: orbit of {g}");
     }
-    let start = Instant::now();
-    let orbits : Vec<PolynomialOrbit<BigRational, DLO>> = generators.into_iter().map(Orbit::new).collect();
-    match equivariant_buchberger(orbits, 200) {
-        Ok(basis) => {
-            println!("  {} orbits computed in {:.2?}; minimal basis:", basis.len(), start.elapsed());
-            for g in minimal_basis(basis) {
-                println!("    {g}");
+    let orbits : OrbitList<BigRational, DLO> = generators.into_iter().map(Orbit::new).collect();
+    type Algorithm = fn(OrbitList<BigRational, DLO>, usize) -> Result<OrbitList<BigRational, DLO>, OrbitList<BigRational, DLO>>;
+    let algorithms : [(&str, Algorithm); 2] = [
+        ("weak basis (equivariant_buchberger)", equivariant_buchberger),
+        ("equivariant Groebner basis (equivariant_groebner_basis)", equivariant_groebner_basis),
+    ];
+    for (label, algorithm) in algorithms {
+        let start = Instant::now();
+        match algorithm(orbits.clone(), 500) {
+            Ok(basis) => {
+                println!("  {label}: {} orbits in {:.2?}; minimal basis:", basis.len(), start.elapsed());
+                for g in minimal_basis(basis) {
+                    println!("    {g}");
+                }
             }
+            Err(partial) => println!("  {label}: stopped after {} orbits ({:.2?})", partial.len(), start.elapsed()),
         }
-        Err(partial) => println!("  stopped after {} orbits ({:.2?})", partial.len(), start.elapsed()),
     }
 }
 

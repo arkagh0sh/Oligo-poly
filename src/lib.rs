@@ -11,6 +11,8 @@ pub mod mon;
 #[cfg(feature = "equivariant")]
 pub mod atoms;
 #[cfg(feature = "equivariant")]
+pub mod coloured;
+#[cfg(feature = "equivariant")]
 pub mod dlo;
 #[cfg(feature = "equivariant")]
 pub mod elements_with_atoms;

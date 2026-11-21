@@ -14,10 +14,13 @@ A. Ghosh and A. Lopez, *Computability of equivariant Gröbner bases* (2025).
   with the dense linear order (Q, <) as the first example
   (`src/atoms.rs`, `src/elements_with_atoms.rs`, `src/dlo.rs`).
   It is only built with the Cargo feature `equivariant`.
-- A first version of the equivariant Buchberger algorithm, in which a polynomial f
-  is only reduced by elements h with supp(h) ⊆ supp(f) (`src/equivariant.rs`,
-  example `equivariant_demo`). It is not complete yet: see the ignored test
-  `membership_with_three_atoms`.
+- The equivariant Buchberger algorithm, in which a polynomial f is only
+  reduced by elements h with supp(h) ⊆ supp(f) (`src/equivariant.rs`, example
+  `equivariant_demo`). `equivariant_buchberger` computes a weak equivariant
+  Gröbner basis, and `equivariant_groebner_basis` computes an equivariant
+  Gröbner basis with the colouring of Section 5 of the article
+  (`src/coloured.rs`). With the latter, f is in the ideal if and only if
+  `reduces_to_zero` holds.
 
 ## Building and testing
 
