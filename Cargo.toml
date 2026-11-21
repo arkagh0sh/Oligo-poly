@@ -3,9 +3,14 @@ name = "atomic_hilbert"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+# The equivariant framework (atoms.rs, dlo.rs, elements_with_atoms.rs) is still
+# under development and is only built when this feature is enabled.
+equivariant = ["dep:rug"]
+
 [dependencies]
 itertools = "0.14.0"
 num-traits = "0.2"
-rug = "1.27"
+rug = { version = "1.27", optional = true }
 sorted-iter = "0.1.11"
 contracts = "0.6"
