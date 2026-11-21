@@ -1,6 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::ops::AddAssign;
 use itertools::Itertools;
+use num_traits::{ConstOne, Zero};
 use super::atoms::*;
+use super::mon::Polynomial;
 
 /// A partial automorphism: the restriction of an automorphism to a finite set.
 /// For ordered atoms it is the order-preserving bijection from its domain onto
@@ -115,5 +118,21 @@ impl<A : AtomsWithOrd, B : ElementsWithAtoms<A>> ElementsWithAtoms<A> for Vec<B>
 
     fn apply_paut(&self, paut : &PartialAut<A>) -> Self {
         self.iter().map(|x| x.apply_paut(paut)).collect()
+    }
+}
+
+/// A polynomial whose variables are atoms is an element with atoms: its support
+/// is the set of its variables, and automorphisms rename the variables.
+impl<F, A> ElementsWithAtoms<A> for Polynomial<F, A>
+where
+    F : AddAssign + Default + Eq + Zero + ConstOne + Clone,
+    A : AtomsWithOrd,
+{
+    fn support(&self) -> BTreeSet<A> {
+        self.domain()
+    }
+
+    fn apply_paut(&self, paut : &PartialAut<A>) -> Self {
+        self.rename_variables(|a| paut.apply(a))
     }
 }

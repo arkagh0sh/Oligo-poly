@@ -135,6 +135,29 @@ mod tests {
     }
 
     #[test]
+    fn polynomials_over_atoms() {
+        use crate::bits::F2;
+        use crate::mon::Polynomial;
+        type P = Polynomial<F2, DLO>;
+        let v = |i : i64| -> P { Polynomial::var(d(i)) };
+        // f = a^2 c + b with atoms a < b < c.
+        let f = v(1) * v(1) * v(3) + v(2);
+        assert_eq!(f.support(), set(&[1, 2, 3]));
+        let paut = PartialAut::new(&set(&[1, 2, 3]), &set(&[5, 6, 9])).unwrap();
+        let g = f.apply_paut(&paut);
+        assert_eq!(g, v(5) * v(5) * v(9) + v(6));
+        // Partial automorphisms preserve the monomial order, so they commute with
+        // taking leading monomials.
+        assert_eq!(Polynomial::<F2, DLO>::from_monomial(g.leading_mon()),
+                   Polynomial::<F2, DLO>::from_monomial(f.leading_mon()).apply_paut(&paut));
+        // The orbit of f: equality and elements supported by {1, 2, 3, 4}.
+        let orbit = Orbit::new(f.clone());
+        assert!(orbit == Orbit::new(g));
+        assert!(orbit != Orbit::new(v(1) * v(1) * v(2) + v(3)));
+        assert_eq!(orbit.supported_by(&set(&[1, 2, 3, 4])).len(), 4);
+    }
+
+    #[test]
     fn orbit_operations() {
         // Orbits of single atoms and of 2-element sets.
         let atoms : Orbit<DLO, DLO> = Orbit::new(d(1));

@@ -41,6 +41,11 @@ impl<X: Hash + Ord + Clone> Monomial<X> {
         }
     }
 
+    /// The monomial obtained by replacing every variable x by f(x).
+    pub fn rename_variables(&self, f : impl Fn(&X) -> X) -> Monomial<X> {
+        Monomial::new(self.expo.iter().map(|(x, e)| (f(x), *e)).collect())
+    }
+
     pub fn is_divisible_by(&self, other : &Monomial<X>) -> bool {
         let mut answer = true;
         for (x,n) in other.expo.iter() {
@@ -210,8 +215,18 @@ impl<F : AddAssign + Default + Eq + Zero + ConstOne + Clone, X : Hash + Ord + Cl
         Polynomial::new(vec![(Monomial::one(),c)])
     }
 
+    /// The monomial `m` as a polynomial, with coefficient 1.
+    pub fn from_monomial(m : Monomial<X>) -> Polynomial<F,X> {
+        Polynomial::new(vec![(m, F::one())])
+    }
+
     pub fn square(&self) -> Polynomial<F,X> {
         self.clone() * self.clone()
+    }
+
+    /// The polynomial obtained by replacing every variable x by f(x).
+    pub fn rename_variables(&self, f : impl Fn(&X) -> X) -> Polynomial<F,X> {
+        Polynomial::new(self.coeff.iter().map(|(m, c)| (m.rename_variables(&f), c.clone())).collect())
     }
 
     /// The set of variables that occur in the polynomial.
@@ -493,17 +508,6 @@ impl<F : Neg<Output = F> + Clone + AddAssign + Default + Zero + Ord + ConstOne, 
     }
 }
 
-// impl<F : Clone, X:AtomsWithOrd + Hash + Clone> SetWithAtoms<X> for Polynomial<F,X> {
-
-//     fn apply_PAut(&self, paut : PartialAut<X>) -> Self
-//         where
-//             Self : Sized {
-//                 if self.domain().size
-
-
-//                 return self.clone();
-//     }
-// }
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -590,6 +594,17 @@ mod tests {
             .fold(Monomial::one(), |best, m| if best.compare(&m) == Less { m } else { best });
         assert_eq!(p.leading_mon(), by_compare);
         assert_eq!(p.leading_mon(), (y.clone() * z.clone()).leading_mon());
+    }
+
+    #[test]
+    fn renaming_variables() {
+        let (x, y, z) = (v2("x"), v2("y"), v2("z"));
+        let f = x.clone() * x.clone() * z.clone() + y.clone();
+        let rename = |v : &String| if v == "z" { "w".to_string() } else { v.clone() };
+        assert_eq!(f.rename_variables(rename), x.clone() * x.clone() * v2("w") + y.clone());
+        // A renaming that is not injective merges monomials: x + y becomes 2x = 0 over F2.
+        let merge = |_ : &String| "x".to_string();
+        assert!((x.clone() + y.clone()).rename_variables(merge).is_zero());
     }
 
     #[test]
