@@ -31,7 +31,8 @@ pub fn buchberger<
 F : AddAssign + MulAssign + Clone + ConstOne + Default + Zero + Eq + Div<Output = F> + Neg<Output = F> + Sub + Display + Ord,
 X : Ord + Hash + Clone + Display>
 (bad_base : Vec<Polynomial<F,X>>) -> Vec<Polynomial<F,X>> {
-    let mut remainders : Vec<Polynomial<F,X>> = bad_base;
+    // Zero polynomials do not change the ideal and have no leading term.
+    let mut remainders : Vec<Polynomial<F,X>> = bad_base.into_iter().filter(|p| !p.is_zero()).collect();
     let mut maybe_good_base : Vec<Polynomial<F,X>> = vec![];
     let mut SPoly : Vec<Polynomial<F,X>> = vec![];
     let zero_poly = Polynomial::zero();
@@ -51,4 +52,20 @@ X : Ord + Hash + Clone + Display>
     }
     let good_base_set : BTreeSet<Polynomial<F,X>> = maybe_good_base.into_iter().collect();
     good_base_set.into_iter().collect()
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bits::F2;
+
+    type P2 = Polynomial<F2, String>;
+
+    fn v2(name : &str) -> P2 { Polynomial::var(name.to_string()) }
+
+    #[test]
+    fn buchberger_ignores_zero_polynomials() {
+        let x = v2("x");
+        assert_eq!(buchberger(vec![P2::zero(), x.clone()]), vec![x]);
+        assert!(buchberger(vec![P2::zero()]).is_empty());
+    }
 }
