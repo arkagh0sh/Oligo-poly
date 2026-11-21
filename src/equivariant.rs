@@ -150,6 +150,7 @@ pub fn equivariant_buchberger<F : Field, A : AtomsWithOrd>(
                     return Err(basis);
                 }
                 let k = basis.len();
+                crate::counters::count_added();
                 basis.push(r.map(|p| p.clone().monic()));
                 for i in 0..=k {
                     pairs.push_back((i, k));
@@ -328,8 +329,12 @@ pub fn one_colour_groebner_basis<F : Field, A : AtomsWithOrd>(
             let r = r.map(|p| p.clone().monic());
             let new = if r.evaluate(has_high) { vec![r] } else { colourings_with_at_most_one_high(&forget_colours(&r)) };
             for o in new {
+                let before = basis.len();
                 if !add(&mut basis, &mut pairs, o) {
                     return Err(forget_all(&basis));
+                }
+                if basis.len() > before {
+                    crate::counters::count_added();
                 }
             }
         }

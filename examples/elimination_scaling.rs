@@ -43,12 +43,28 @@
 //!   colouring and ordinary (default elimination,one-colour).
 //! - `--csv FILE`: also write one line per ideal and method to FILE.
 //!
-//! The program prints one line per ideal and, for each number of variables, a
-//! summary: how many ideals each method finished, the median and the mean of
-//! its times over the ideals that all methods finished, and the number of
-//! ideals for which the property fails.
+//! For each ideal and method, the program prints:
+//!
+//! - ms: the time;
+//! - the steps, counted by `counters.rs` (for elimination, summed over the 2^n
+//!   elimination ideals): S-polys, the S-polynomials computed; reductions, the
+//!   elementary reduction steps (one term cancelled by a multiple of a
+//!   reducer, including the final interreduction); added, the polynomials added
+//!   to a basis by the main loop of Buchberger's algorithm;
+//! - the final basis: size, its number of polynomials; minimal, the number left
+//!   after removing every h for which another kept h' has supp(h') ⊆ supp(h)
+//!   and LM(h') dividing LM(h) (`minimal_basis`); terms, its total number of
+//!   terms;
+//! - property: whether the basis has the property (checked against the
+//!   elimination bases).
+//!
+//! For each number of variables, it prints how many ideals each method
+//! finished, the medians of these numbers over the ideals that all methods
+//! finished, the ratios of the medians of the one-colour trick to those of the
+//! elimination method, and the number of ideals for which the property fails.
 
 use atomic_hilbert::atoms::Orbit;
+use atomic_hilbert::counters::{self, Counts};
 use atomic_hilbert::equivariant::{equivariant_groebner_basis, minimal_basis, one_colour_groebner_basis, OrbitList};
 use atomic_hilbert::ideal::{buchberger, elimination_ideal};
 use atomic_hilbert::mon::Polynomial;
@@ -115,7 +131,7 @@ impl Options {
                 "--csv" => {
                     let path = args.next().expect("--csv needs a file name");
                     let mut file = File::create(&path).expect("cannot create the CSV file");
-                    writeln!(file, "variables,ideal,method,status,ms,size,minimal,property").unwrap();
+                    writeln!(file, "variables,ideal,method,status,ms,s_polynomials,reductions,added,size,minimal,terms,property").unwrap();
                     options.csv = Some(file);
                 }
                 other => panic!("unknown option {other}"),
@@ -237,17 +253,20 @@ fn compute(method : &str, generators : &[P]) -> Option<Vec<P>> {
 }
 
 /// The child process: reads the generators from standard input, one per line,
-/// runs the method, and prints its time and its basis.
+/// runs the method, and prints its time, its step counts and its basis.
 fn child(method : &str) {
     let mut input = String::new();
     std::io::stdin().read_to_string(&mut input).unwrap();
     let generators : Vec<P> = input.lines().filter(|l| !l.trim().is_empty()).map(parse).collect();
+    counters::reset();
     let start = Instant::now();
     let basis = compute(method, &generators);
     let time = start.elapsed();
+    let counts = counters::get();
     match basis {
         Some(basis) => {
             println!("time {}", time.as_secs_f64() * 1000.0);
+            println!("counts {} {} {}", counts.s_polynomials, counts.reductions, counts.added);
             for p in basis {
                 println!("poly {}", to_syntax(&p));
             }
@@ -258,7 +277,7 @@ fn child(method : &str) {
 
 /// The outcome of one method on one ideal.
 enum Status {
-    Done { ms : f64, basis : Vec<P> },
+    Done { ms : f64, counts : Counts, basis : Vec<P> },
     Timeout,
     Limit,
 }
@@ -295,17 +314,21 @@ fn run_child(method : &str, generators : &[P], timeout : Duration) -> Status {
     }
     let output = reader.join().unwrap();
     let mut ms = None;
+    let mut counts = Counts::default();
     let mut basis = Vec::new();
     for line in output.lines() {
         if line == "limit" {
             return Status::Limit;
         } else if let Some(t) = line.strip_prefix("time ") {
             ms = Some(t.parse().unwrap());
+        } else if let Some(c) = line.strip_prefix("counts ") {
+            let v : Vec<u64> = c.split_whitespace().map(|n| n.parse().unwrap()).collect();
+            counts = Counts { s_polynomials : v[0], reductions : v[1], added : v[2] };
         } else if let Some(p) = line.strip_prefix("poly ") {
             basis.push(parse(p));
         }
     }
-    Status::Done { ms : ms.expect("the child process failed"), basis }
+    Status::Done { ms : ms.expect("the child process failed"), counts, basis }
 }
 
 /// Whether `basis` has the property for every set V, with `reference` as above.
@@ -346,11 +369,13 @@ fn main() {
     );
     for &n in &options.vars.clone() {
         println!("\n== {n} variables ({} sets V)", 1u64 << n);
-        let header : Vec<String> = methods.iter().map(|m| format!("{:>24}", format!("{m} ms (size, min)"))).collect();
-        println!("  {:>5} {} {:>10}", "ideal", header.join(" "), "property");
-        // For each method: the times on the ideals finished by all methods, the
-        // numbers of finished ideals and of ideals where the property fails.
-        let mut times : Vec<Vec<f64>> = vec![Vec::new(); methods.len()];
+        println!(
+            "  {:>5} {:<12} {:>12} {:>10} {:>12} {:>8} {:>6} {:>8} {:>8} {:>9}",
+            "ideal", "method", "ms", "S-polys", "reductions", "added", "size", "minimal", "terms", "property"
+        );
+        // For each method, the metrics on the ideals finished by all methods:
+        // ms, S-polynomials, reductions, added, size, minimal size, terms.
+        let mut metrics : Vec<Vec<[f64; 7]>> = vec![Vec::new(); methods.len()];
         let mut finished = vec![0usize; methods.len()];
         let mut failing = vec![0usize; methods.len()];
         for k in 1..=options.count {
@@ -361,57 +386,84 @@ fn main() {
                 ("elimination", Status::Done { basis, .. }) => Some(basis.clone()),
                 _ => None,
             });
-            let mut cells = Vec::new();
-            let mut properties = Vec::new();
+            let mut row_metrics = Vec::new();
             for (i, (m, s)) in methods.iter().zip(&statuses).enumerate() {
-                let (cell, csv) = match s {
-                    Status::Done { ms, basis } => {
+                match s {
+                    Status::Done { ms, counts, basis } => {
                         finished[i] += 1;
                         let minimal = minimal_size(basis);
+                        let terms : usize = basis.iter().map(|p| p.monomials().count()).sum();
                         let property = match &reference {
                             Some(r) if m != "elimination" => {
                                 let ok = has_property(basis, r, &vars);
                                 if !ok {
                                     failing[i] += 1;
                                 }
-                                properties.push(format!("{}:{}", m, if ok { "ok" } else { "FAILS" }));
-                                if ok { "ok" } else { "fails" }
+                                if ok { "ok" } else { "FAILS" }
                             }
-                            _ => "unchecked",
+                            _ => "",
                         };
-                        (
-                            format!("{:>24}", format!("{ms:.1} ({}, {minimal})", basis.len())),
-                            format!("done,{ms:.3},{},{minimal},{property}", basis.len()),
-                        )
+                        println!(
+                            "  {:>5} {:<12} {:>12.1} {:>10} {:>12} {:>8} {:>6} {:>8} {:>8} {:>9}",
+                            k, m, ms, counts.s_polynomials, counts.reductions, counts.added, basis.len(), minimal, terms, property
+                        );
+                        if let Some(file) = options.csv.as_mut() {
+                            writeln!(
+                                file,
+                                "{n},{k},{m},done,{ms:.3},{},{},{},{},{minimal},{terms},{}",
+                                counts.s_polynomials, counts.reductions, counts.added, basis.len(),
+                                if property.is_empty() { "unchecked" } else { property }
+                            )
+                            .unwrap();
+                        }
+                        row_metrics.push(Some([
+                            *ms,
+                            counts.s_polynomials as f64,
+                            counts.reductions as f64,
+                            counts.added as f64,
+                            basis.len() as f64,
+                            minimal as f64,
+                            terms as f64,
+                        ]));
                     }
-                    Status::Timeout => (format!("{:>24}", "timeout"), "timeout,,,,".to_string()),
-                    Status::Limit => (format!("{:>24}", "orbit limit"), "limit,,,,".to_string()),
-                };
-                cells.push(cell);
-                if let Some(file) = options.csv.as_mut() {
-                    writeln!(file, "{n},{k},{m},{csv}").unwrap();
+                    Status::Timeout | Status::Limit => {
+                        let status = if matches!(s, Status::Timeout) { "timeout" } else { "limit" };
+                        println!("  {:>5} {:<12} {:>12}", k, m, status);
+                        if let Some(file) = options.csv.as_mut() {
+                            writeln!(file, "{n},{k},{m},{status},,,,,,,,").unwrap();
+                        }
+                        row_metrics.push(None);
+                    }
                 }
             }
-            if statuses.iter().all(|s| matches!(s, Status::Done { .. })) {
-                for (i, s) in statuses.iter().enumerate() {
-                    if let Status::Done { ms, .. } = s {
-                        times[i].push(*ms);
-                    }
+            if row_metrics.iter().all(Option::is_some) {
+                for (i, r) in row_metrics.into_iter().enumerate() {
+                    metrics[i].push(r.unwrap());
                 }
             }
-            println!("  {:>5} {} {:>10}", k, cells.join(" "), properties.join(" "));
         }
-        println!("  summary over the {} ideals finished by all methods:", times[0].len());
+        let names = ["ms", "S-polys", "reductions", "added", "size", "minimal", "terms"];
+        println!("  medians over the {} ideals finished by all methods:", metrics[0].len());
+        println!("    {:<12} {:>8} {}", "method", "finished", names.iter().map(|n| format!("{n:>12}")).collect::<Vec<_>>().join(""));
+        let medians : Vec<Vec<f64>> = metrics
+            .iter()
+            .map(|rows| (0..7).map(|c| median(&mut rows.iter().map(|r| r[c]).collect::<Vec<f64>>())).collect())
+            .collect();
         for (i, m) in methods.iter().enumerate() {
-            let mean = times[i].iter().sum::<f64>() / times[i].len() as f64;
             println!(
-                "    {:<12} finished {:>3}/{}, median {:>10.1} ms, mean {:>10.1} ms, property fails on {}",
+                "    {:<12} {:>5}/{:<2} {}   property fails on {}",
                 m,
                 finished[i],
                 options.count,
-                median(&mut times[i]),
-                mean,
+                medians[i].iter().map(|v| format!("{v:>12.1}")).collect::<Vec<_>>().join(""),
                 failing[i]
+            );
+        }
+        if let (Some(e), Some(o)) = (methods.iter().position(|m| m == "elimination"), methods.iter().position(|m| m == "one-colour")) {
+            println!(
+                "    {:<21} {}",
+                "one-colour/elim.",
+                (0..7).map(|c| format!("{:>12.2}", medians[o][c] / medians[e][c])).collect::<Vec<_>>().join("")
             );
         }
     }

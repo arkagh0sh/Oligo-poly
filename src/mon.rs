@@ -293,6 +293,7 @@ impl<F : AddAssign + Default + Eq + Zero + ConstOne + Clone, X : Hash + Ord + Cl
       F : Neg<Output = F> + Div<Output = F>
     {
         if  self.is_reducible_by(other) {
+            crate::counters::count_reduction();
             let coeff = self.leading_coeff() / other.leading_coeff();
             let quotient: Polynomial<F,X> = Polynomial::new(vec![(self.leading_mon() / other.leading_mon(), coeff)]);
             self - quotient * other.clone()
@@ -310,6 +311,7 @@ impl<F : AddAssign + Default + Eq + Zero + ConstOne + Clone, X : Hash + Ord + Cl
     where
       F : Div<Output = F> + Neg<Output = F> + Sub
     {
+        crate::counters::count_s_polynomial();
         let l = self.leading_mon().lcm(&other.leading_mon());
         let a = l.clone() / self.leading_mon();
         let b = l / other.leading_mon();
@@ -326,6 +328,7 @@ impl<F : AddAssign + Default + Eq + Zero + ConstOne + Clone, X : Hash + Ord + Cl
     where
       F : Neg<Output = F> + Div<Output = F>
     {
+        crate::counters::count_reduction();
         let coeff = self.coeff_of(m) / other.leading_coeff();
         let quotient : Polynomial<F,X> = Polynomial::new(vec![(m.clone() / other.leading_mon(), coeff)]);
         self - quotient * other.clone()

@@ -100,6 +100,7 @@ X : Ord + Hash + Clone>
         let r = basis[i].clone().syzygy(&basis[j]).normal_form(&basis);
         if !r.is_zero() {
             let k = basis.len();
+            crate::counters::count_added();
             basis.push(r);
             for i in 0..k {
                 pairs.insert((i, k));

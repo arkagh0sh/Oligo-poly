@@ -65,7 +65,10 @@ The example `elimination_scaling` compares the elimination method with the
 one-colour trick (and optionally the other methods) on random ideals with more
 variables. Each method runs on each ideal in a child process with a time
 limit, and the property of every basis is checked against the elimination
-bases.
+bases. It reports the time, the steps counted by `src/counters.rs`
+(S-polynomials, elementary reduction steps and polynomials added), and the
+size of the final basis (polynomials, polynomials after removing redundant
+ones, and terms).
 
 ```sh
 cargo run --release --features equivariant --example elimination_scaling -- --vars 5,6,7 --count 10 --timeout 60

@@ -2,6 +2,7 @@
 //! for polynomial rings whose variables are the atoms of an oligomorphic structure.
 
 pub mod bits;
+pub mod counters;
 pub mod helpers;
 pub mod ideal;
 pub mod mon;
