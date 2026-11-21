@@ -10,6 +10,11 @@
 //!   for a lexicographic elimination order);
 //! - one-colour: `equivariant::one_colour_groebner_basis` with the variables of
 //!   `trivial.rs` (experimental, not proved correct);
+//! - direct: `one_colour::one_colour_basis` with its default options, the same
+//!   algorithm without the orbit framework, with the adapted Buchberger
+//!   criteria and the pairs in the order of creation;
+//! - direct-plain: the same without the criteria, which makes the same
+//!   reductions as one-colour;
 //! - colouring: `equivariant::equivariant_groebner_basis` (the full trick);
 //! - ordinary: `ideal::buchberger`, which does not have the property in general.
 //!
@@ -40,7 +45,8 @@
 //! - `--seed`: changes the random ideals (default 1).
 //! - `--timeout`: the time limit for one method on one ideal (default 30).
 //! - `--methods`: a comma-separated list among elimination, one-colour,
-//!   colouring and ordinary (default elimination,one-colour).
+//!   direct, direct-plain, colouring and ordinary (default
+//!   elimination,one-colour,direct).
 //! - `--csv FILE`: also write one line per ideal and method to FILE.
 //!
 //! For each ideal and method, the program prints:
@@ -60,7 +66,7 @@
 //!
 //! For each number of variables, it prints how many ideals each method
 //! finished, the medians of these numbers over the ideals that all methods
-//! finished, the ratios of the medians of the one-colour trick to those of the
+//! finished, the ratios of the medians of each method to those of the
 //! elimination method, and the number of ideals for which the property fails.
 
 use atomic_hilbert::atoms::Orbit;
@@ -68,6 +74,7 @@ use atomic_hilbert::counters::{self, Counts};
 use atomic_hilbert::equivariant::{equivariant_groebner_basis, minimal_basis, one_colour_groebner_basis, OrbitList};
 use atomic_hilbert::ideal::{buchberger, elimination_ideal};
 use atomic_hilbert::mon::Polynomial;
+use atomic_hilbert::one_colour::{one_colour_basis, Options as DirectOptions};
 use atomic_hilbert::trivial::Var;
 use num_rational::BigRational;
 use num_traits::{One, Pow, Zero};
@@ -80,7 +87,7 @@ use std::time::{Duration, Instant};
 type Q = BigRational;
 type P = Polynomial<Q, Var>;
 
-const METHODS : [&str; 4] = ["elimination", "one-colour", "colouring", "ordinary"];
+const METHODS : [&str; 6] = ["elimination", "one-colour", "direct", "direct-plain", "colouring", "ordinary"];
 
 /// The command-line options of the parent process.
 struct Options {
@@ -105,7 +112,7 @@ impl Options {
             degree : 2,
             seed : 1,
             timeout : Duration::from_secs(30),
-            methods : vec!["elimination".to_string(), "one-colour".to_string()],
+            methods : vec!["elimination".to_string(), "one-colour".to_string(), "direct".to_string()],
             csv : None,
         };
         let mut args = args.into_iter();
@@ -246,6 +253,8 @@ fn compute(method : &str, generators : &[P]) -> Option<Vec<P>> {
             Some(union)
         }
         "one-colour" => one_colour_groebner_basis(orbits(), 1_000_000).ok().map(polynomials),
+        "direct" => Some(one_colour_basis(generators.to_vec(), DirectOptions::default())),
+        "direct-plain" => Some(one_colour_basis(generators.to_vec(), DirectOptions { criteria : false, normal_strategy : false })),
         "colouring" => equivariant_groebner_basis(orbits(), 1_000_000).ok().map(polynomials),
         "ordinary" => Some(buchberger(generators.to_vec())),
         _ => panic!("unknown method {method}"),
@@ -459,12 +468,14 @@ fn main() {
                 failing[i]
             );
         }
-        if let (Some(e), Some(o)) = (methods.iter().position(|m| m == "elimination"), methods.iter().position(|m| m == "one-colour")) {
-            println!(
-                "    {:<21} {}",
-                "one-colour/elim.",
-                (0..7).map(|c| format!("{:>12.2}", medians[o][c] / medians[e][c])).collect::<Vec<_>>().join("")
-            );
+        if let Some(e) = methods.iter().position(|m| m == "elimination") {
+            for (o, m) in methods.iter().enumerate().filter(|(_, m)| *m != "elimination") {
+                println!(
+                    "    {:<21} {}",
+                    format!("{m}/elim."),
+                    (0..7).map(|c| format!("{:>12.2}", medians[o][c] / medians[e][c])).collect::<Vec<_>>().join("")
+                );
+            }
         }
     }
 }

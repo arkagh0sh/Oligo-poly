@@ -6,6 +6,7 @@ pub mod counters;
 pub mod helpers;
 pub mod ideal;
 pub mod mon;
+pub mod one_colour;
 pub mod parallel;
 
 // The equivariant framework is still under development. It is only built with
