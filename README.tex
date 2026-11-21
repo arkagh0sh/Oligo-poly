@@ -538,6 +538,18 @@ However, $x_b - x_a \in I$ for $a < b$:
 there are atoms $c < d < a$, and $x_a \equiv x_c x_d \equiv x_b$ modulo $I$.
 No element $h$ of the $5$ orbits with $\mathsf{supp}(h) \subseteq \{a, b\}$
 has a leading monomial dividing $x_b$, so $x_b - x_a$ does not reduce to zero.
+Similarly, for $H$ the orbit of $x_a^2 - x_b$ with $a < b$,
+the algorithm stops with the orbits of $x_b - x_a^2$, $x_a^4 - x_a^2$ and $x_a^6 - x_a^4$,
+and the minimal elements are the orbits of $x_b - x_a^2$ and $x_a^4 - x_a^2$.
+However, $x_a^2 - x_a \in I$:
+for an atom $c < a$, we have $x_a \equiv x_c^2$ and $x_c^4 \equiv x_c^2$,
+so $x_a^2 \equiv x_c^4 \equiv x_c^2 \equiv x_a$ modulo $I$.
+The elements $h$ of the result with $\mathsf{supp}(h) \subseteq \{a\}$
+are in the orbits of $x_a^4 - x_a^2$ and $x_a^6 - x_a^4$,
+and neither $x_a^4$ nor $x_a^6$ divides $x_a^2$,
+so $x_a^2 - x_a$ does not reduce to zero.
+In both examples, the derivation needs atoms below the atoms of the polynomial,
+which the support condition forbids.
 
 \paragraph{The colouring.}
 The function \code{equivariant\_groebner\_basis} uses the construction of \cite[Section 5]{GL25}.
