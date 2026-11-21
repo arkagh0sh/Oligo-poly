@@ -1,147 +1,119 @@
-use core::panic;
-use std::hash::Hash;
-use std::clone::Clone;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
-use super::atoms::*;
-use super::helpers::*;
+use std::collections::{BTreeMap, BTreeSet};
 use itertools::Itertools;
+use super::atoms::*;
 
-
-#[derive(Debug, Hash, Clone)]
-pub struct PartialAut<A> where A : AtomsWithOrd + Clone {
-
-// should be BTreeSets
-// actually have domain, range and maps.
-// redundancy helps! 
-
-    pub domain : BTreeSet<A>,
-    pub range  : BTreeSet<A>
+/// A partial automorphism: the restriction of an automorphism to a finite set.
+/// For ordered atoms it is the order-preserving bijection from its domain onto
+/// its range, so it is determined by these two sets.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct PartialAut<A : AtomsWithOrd> {
+    map : BTreeMap<A, A>
 }
 
-impl<A : Hash + AtomsWithOrd + Clone> PartialAut<A> {
-    // add a check that the map is a bijection
-    pub fn new(domain : &BTreeSet<A>, range : &BTreeSet<A>) -> Self {
-        if domain.len() != range.len() {
-            panic!("dom and range must be of same length");
-        } else if !has_unique_elements(domain.clone()){
-            panic!("dom must be a tuple of non-repeating elements");
-        } else if !has_unique_elements(range.clone()) {
-            panic!("range must be a tuple of non-repeating elements");
-        } else if !A::in_same_orbit(domain, range) {
-            panic!("dom and range must be in the same orbit");
-        }
-        else {
-            PartialAut {domain : domain.clone(), range : range.clone()}
+impl<A : AtomsWithOrd> PartialAut<A> {
+    /// The partial automorphism mapping `domain` onto `range`, if some
+    /// automorphism maps `domain` onto `range`.
+    pub fn new(domain : &BTreeSet<A>, range : &BTreeSet<A>) -> Option<Self> {
+        if A::in_same_orbit(domain, range) {
+            Some(PartialAut { map : domain.iter().cloned().zip(range.iter().cloned()).collect() })
+        } else {
+            None
         }
     }
+
+    pub fn domain(&self) -> BTreeSet<A> {
+        self.map.keys().cloned().collect()
+    }
+
+    pub fn range(&self) -> BTreeSet<A> {
+        self.map.values().cloned().collect()
+    }
+
+    /// The image of an atom of the domain.
+    pub fn apply(&self, a : &A) -> A {
+        match self.map.get(a) {
+            Some(b) => b.clone(),
+            None => panic!("the atom {:?} is not in the domain of the partial automorphism", a),
+        }
+    }
+}
+
+/// The union of the supports of the elements of a tuple.
+pub fn support_of_all<A : AtomsWithOrd, B : ElementsWithAtoms<A>>(elements : &[B]) -> BTreeSet<A> {
+    elements.iter().flat_map(|x| x.support()).collect()
 }
 
 /*
 Since we mean to use it only for polynomials,
 we only work with equivariant orbits.
 */
-pub trait ElementsWithAtoms<A : AtomsWithOrd + Clone + Hash> : Eq {
+/// Elements built from atoms, on which the automorphisms of the atoms act.
+pub trait ElementsWithAtoms<A : AtomsWithOrd> : Clone + Eq {
 
-    // Applies a partial automorphism to an element
-    fn apply_paut(&self, paut : PartialAut<A>) -> Self
-    where
-        Self : Sized;
-
-    //Gives the support of an element.
+    /// The least support of the element: the atoms that occur in it.
     fn support(&self) -> BTreeSet<A>;
 
-    // Checks if two tuples are in the same orbit
-    fn in_same_orbit(first : &Vec<Self>, second : &Vec<Self>) -> bool
-    where
-        Self: Sized {
-            let first_sup = first.into_iter()
-                .map(|elem| elem.support())
-                .into_iter()
-                .flatten()
-                .collect::<BTreeSet<_>>()
-                .into_iter()
-                .collect();
+    /// Applies a partial automorphism whose domain contains the support.
+    fn apply_paut(&self, paut : &PartialAut<A>) -> Self;
 
-            let second_sup = second.into_iter()
-                .map(|elem| elem.support())
-                .flatten()
-                .collect::<BTreeSet<_>>()
-                .into_iter()
-                .collect();
-
-            if A::in_same_orbit(&first_sup,&second_sup) {
-                let paut = PartialAut::new(&first_sup,&second_sup);
-                let shifted_first : Vec<Self> = first
-                    .into_iter()
-                    .map(|elem| elem.apply_paut(paut.clone())).collect();
-                     // use paut without cloning
-                shifted_first == *second
-            } else {
-                false
-            }
+    /// Whether some automorphism maps the tuple `first` to the tuple `second`.
+    /// Such an automorphism maps the support of `first` onto that of `second`,
+    /// so it suffices to try the partial automorphism between the supports.
+    fn tuples_in_same_orbit(first : &[Self], second : &[Self]) -> bool {
+        if first.len() != second.len() {
+            return false;
         }
-    
-    //Given a list of orbits, output the list of orbits in the product
-
-    // this should be implementable just by using support and project to orbit and using AtomsWithOrd
-    fn prod_orbit(orbits : &Vec<Orbit<Self>>) -> 
-    Vec<Orbit<A, Vec<Self>>>
-    where
-        Self : Sized {
-
-            let support_list : Vec<Vec<A>> = orbits.iter().map(|x| x.support()).collect();
-
-            let support_len_list : Vec<usize> = orbits.iter().map(|x| x.support().len()).collect();
-
-            let all_rep : Vec<Vec<A>> = A::orbit_reps(support_len_list.clone().iter().sum());
-
-            let all_rep_split : Vec<Vec<Vec<A>>> = all_rep.into_iter().map(|inner_vec| {
-                let mut sub_vectors = Vec::new();
-                let mut current_slice = &inner_vec[..];
-                
-                for len in support_len_list.clone() {
-                    if current_slice.len() >= len {
-                        let (first, second) = current_slice.split_at(len);
-                        sub_vectors.push(first.to_vec());
-                        current_slice = second; // Move the pointer forward
-                        }
-                    }
-                    if !current_slice.is_empty() {
-                        panic!("This part of the code should not be reached");
-                    }
-                    sub_vectors
-                }).collect();
-
-                let required_reps_split : Vec<Vec<Vec<A>>> = all_rep_split.into_iter().filter(|x| are_pointwise_equivalent(x, &support_list, A::in_same_orbit)).collect();
-
-                let product_rep_list : Vec<Vec<Self>> =
-                    required_reps_split.into_iter().map(|sup_list| {
-                        sup_list.into_iter().zip(orbits.iter())
-                        .map(|(sup,orb_rep)| orb_rep.apply_paut(PartialAut::new(&orb_rep.support(), &sup)))
-                        .collect()
-                    }).collect();
-   
-
-                return product_rep_list;
-            }
-
-    /*
-    Given a representative of an orbits and a support, output the list of all elements in the orbit supported by the given supprt.
-    Technically we should have a method to compute the algebraic closure of a support. But we omit that for simplicity.
-    */
-
-    fn project_to_support(rep : &Self, support : &Vec<A>) -> Vec<Self>
-    where
-        Self : Sized {
-            let rep_supp = rep.support();
-            let sup_len = rep_supp.len();
-            let support_set : BTreeSet<A> = support.clone().into_iter().collect();
-            let sup_list : Vec<Vec<A>> = support_set
-                .into_iter()
-                .combinations(sup_len)
-                .collect();
-            let good_sup_list : Vec<Vec<A>> = sup_list.into_iter().filter(|elem| A::in_same_orbit(&rep_supp, elem)).collect();
-
-            good_sup_list.into_iter().map(|supp| rep.apply_paut(PartialAut::new(&rep_supp, &supp))).collect()
+        match PartialAut::new(&support_of_all(first), &support_of_all(second)) {
+            Some(paut) => first.iter().zip(second.iter()).all(|(x, y)| x.apply_paut(&paut) == *y),
+            None => false,
         }
+    }
+
+    /// The elements in the orbit of `rep` that are supported by `support`.
+    /// Such an element is the image of `rep` under the partial automorphism from
+    /// the support of `rep` onto a subset of `support`.
+    /// Technically we should compute the algebraic closure of a support,
+    /// but we omit that for simplicity.
+    fn project_to_support(rep : &Self, support : &BTreeSet<A>) -> Vec<Self> {
+        let rep_support = rep.support();
+        support
+            .iter()
+            .cloned()
+            .combinations(rep_support.len())
+            .filter_map(|subset| PartialAut::new(&rep_support, &subset.into_iter().collect()))
+            .map(|paut| rep.apply_paut(&paut))
+            .collect()
+    }
+}
+
+impl<A : AtomsWithOrd> ElementsWithAtoms<A> for BTreeSet<A> {
+    fn support(&self) -> BTreeSet<A> {
+        self.clone()
+    }
+
+    fn apply_paut(&self, paut : &PartialAut<A>) -> Self {
+        self.iter().map(|a| paut.apply(a)).collect()
+    }
+}
+
+impl<A : AtomsWithOrd, B : ElementsWithAtoms<A>, C : ElementsWithAtoms<A>> ElementsWithAtoms<A> for (B, C) {
+    fn support(&self) -> BTreeSet<A> {
+        let mut support = self.0.support();
+        support.extend(self.1.support());
+        support
+    }
+
+    fn apply_paut(&self, paut : &PartialAut<A>) -> Self {
+        (self.0.apply_paut(paut), self.1.apply_paut(paut))
+    }
+}
+
+impl<A : AtomsWithOrd, B : ElementsWithAtoms<A>> ElementsWithAtoms<A> for Vec<B> {
+    fn support(&self) -> BTreeSet<A> {
+        support_of_all(self)
+    }
+
+    fn apply_paut(&self, paut : &PartialAut<A>) -> Self {
+        self.iter().map(|x| x.apply_paut(paut)).collect()
+    }
 }

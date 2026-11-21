@@ -18,3 +18,8 @@ jobs:
         run: cargo test
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
+      # The equivariant feature builds rug, which compiles GMP from source.
+      - name: Test with the equivariant feature
+        run: cargo test --features equivariant
+      - name: Clippy with the equivariant feature
+        run: cargo clippy --all-targets --features equivariant -- -D warnings
