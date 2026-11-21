@@ -53,6 +53,12 @@ impl<X: Hash + Ord + Clone> Monomial<X> {
         Monomial::new(self.expo.iter().map(|(x, e)| (f(x), *e)).collect())
     }
 
+    /// The variables of the monomial with their (non-zero) exponents, in
+    /// increasing order of the variables.
+    pub fn exponents(&self) -> impl Iterator<Item = (&X, Exponent)> {
+        self.expo.iter().map(|(x, e)| (x, *e))
+    }
+
     /// The total degree: the sum of the exponents.
     pub fn degree(&self) -> Exponent {
         self.expo.values().sum()

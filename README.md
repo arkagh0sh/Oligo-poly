@@ -74,7 +74,10 @@ ones, and terms).
 With `--methods elimination,direct,gfan`, it also compares with gfan
 (installed for example with `apt-get install gfan`): the union of all reduced
 Gröbner bases computed by `gfan_bases` is a universal Gröbner basis, which
-also has the property.
+also has the property. With `--fan`, it also counts, for each method, the cones
+of the Gröbner fan for whose monomial order its basis is a Gröbner basis. With
+`--gens-per-var R`, the number of generators is round(R n), so that the ideals
+become denser as n grows.
 
 ```sh
 cargo run --release --features equivariant --example elimination_scaling -- --vars 5,6,7 --count 10 --timeout 60
