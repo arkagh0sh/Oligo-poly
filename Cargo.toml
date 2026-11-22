@@ -7,6 +7,8 @@ edition = "2024"
 # The equivariant framework (atoms.rs, dlo.rs, elements_with_atoms.rs) is still
 # under development and is only built when this feature is enabled.
 equivariant = ["dep:rug", "dep:itertools"]
+# Symbolic atoms (work in progress); does not need rug, so it also builds for WebAssembly.
+symbolic = []
 
 [dependencies]
 itertools = { version = "0.14.0", optional = true }

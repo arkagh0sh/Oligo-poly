@@ -25,3 +25,5 @@ pub mod equivariant;
 pub mod tree;
 #[cfg(feature = "equivariant")]
 pub mod trivial;
+#[cfg(feature = "symbolic")]
+pub mod symbolic;
