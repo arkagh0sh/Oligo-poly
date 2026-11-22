@@ -1,8 +1,14 @@
 //! Signatures, terms and quantifier-free formulas, with a parser.
 //!
 //! A structure has a built-in linear order `<` and equality `=`, and the
-//! relation and function symbols of its signature. A formula is quantifier
-//! free; an axiom is a formula whose variables are universally quantified.
+//! relation and function symbols of its signature; a function symbol with no
+//! arguments is a constant. A formula is quantifier free, and it is used in two
+//! ways:
+//!
+//! - an [`Axiom`] is a formula whose variables are universally quantified; a
+//!   [`Theory`] is a signature with axioms;
+//! - a [`Description`] is a formula whose variables are atoms; it describes
+//!   the orbit of the tuple of these atoms.
 //!
 //! Syntax of formulas, from the loosest to the tightest binding:
 //!
@@ -13,8 +19,9 @@
 //!   `s < t`, `s > t`, `s <= t` (meaning `s < t | s = t`), `s >= t`, `s = t`,
 //!   `s != t`, and `R(t1, ..., tk)` for a relation symbol R.
 //!
-//! A term is a variable (an identifier that is not a symbol of the signature)
-//! or `f(t1, ..., tk)` for a function symbol f.
+//! A term is a variable (an identifier that is not a symbol of the signature),
+//! a constant `c`, or `f(t1, ..., tk)` for a function symbol f with k >= 1
+//! arguments.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -95,12 +102,28 @@ impl Formula {
     }
 }
 
-/// A formula with names for its variables. As an axiom, its variables are
-/// universally quantified.
+/// A formula whose variables are universally quantified, with their names.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Named {
+pub struct Axiom {
     pub variables : Vec<String>,
     pub formula : Formula,
+}
+
+/// A formula whose variables are atoms, with their names: it describes the
+/// orbit of the tuple of these atoms.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Description {
+    pub variables : Vec<String>,
+    pub formula : Formula,
+}
+
+/// A signature with axioms: the finite structures of the signature that
+/// satisfy the axioms (and in which `<` is a linear order) are the finite
+/// substructures of the structure of the atoms.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Theory {
+    pub signature : Signature,
+    pub axioms : Vec<Axiom>,
 }
 
 /// An error of the parser, with a message.
@@ -292,8 +315,11 @@ impl Parser<'_> {
             Some(Token::Ident(name)) => {
                 self.pos += 1;
                 if let Some(f) = self.signature.function(&name) {
-                    let args = self.arguments()?;
                     let arity = self.signature.functions[f].1;
+                    if arity == 0 {
+                        return Ok(Term::App(f, Vec::new()));
+                    }
+                    let args = self.arguments()?;
                     if args.len() != arity {
                         return Err(ParseError(format!("the function {name} has {arity} arguments, not {}", args.len())));
                     }
@@ -318,19 +344,38 @@ impl Parser<'_> {
 
 /// Parses a formula over `signature`. The variables are numbered in the order
 /// of their first occurrence, after the given `variables`.
-pub fn parse_formula(src : &str, signature : &Signature, variables : &[String]) -> Result<Named, ParseError> {
+fn parse(src : &str, signature : &Signature, variables : &[String]) -> Result<(Vec<String>, Formula), ParseError> {
     let mut parser = Parser { tokens : tokenize(src)?, pos : 0, signature, variables : variables.to_vec() };
     let formula = parser.formula()?;
     if parser.pos != parser.tokens.len() {
         return Err(ParseError(format!("unexpected {:?} after the formula", parser.tokens[parser.pos])));
     }
-    Ok(Named { variables : parser.variables, formula })
+    Ok((parser.variables, formula))
+}
+
+/// Parses an axiom over `signature`. Its variables are numbered in the order of
+/// their first occurrence.
+pub fn parse_axiom(src : &str, signature : &Signature) -> Result<Axiom, ParseError> {
+    let (variables, formula) = parse(src, signature, &[])?;
+    Ok(Axiom { variables, formula })
+}
+
+/// Parses a description over `signature` whose variables are the given
+/// `atoms`, numbered in this order. A variable that is not one of the `atoms`
+/// is an error, so that a misspelt atom is not taken for a new one.
+pub fn parse_description(src : &str, signature : &Signature, atoms : &[String]) -> Result<Description, ParseError> {
+    let (variables, formula) = parse(src, signature, atoms)?;
+    if let Some(unknown) = variables.get(atoms.len()) {
+        return Err(ParseError(format!("{unknown} is not a declared atom")));
+    }
+    Ok(Description { variables, formula })
 }
 
 /// Writes a term with the names of the variables and symbols.
 pub fn show_term(t : &Term, signature : &Signature, names : &[String]) -> String {
     match t {
         Term::Var(i) => names.get(*i).cloned().unwrap_or_else(|| format!("v{i}")),
+        Term::App(f, args) if args.is_empty() => signature.functions[*f].0.clone(),
         Term::App(f, args) => {
             let args : Vec<String> = args.iter().map(|a| show_term(a, signature, names)).collect();
             format!("{}({})", signature.functions[*f].0, args.join(", "))
@@ -407,16 +452,32 @@ mod tests {
     #[test]
     fn parse_and_flatten() {
         let s = tree_signature();
-        let a = parse_formula("le(z, x) & le(z, y) -> le(z, meet(x, y))", &s, &[]).unwrap();
+        let a = parse_axiom("le(z, x) & le(z, y) -> le(z, meet(x, y))", &s).unwrap();
         assert_eq!(a.variables, vec!["z", "x", "y"]);
         let (flat, defs) = flatten(&a.formula, 3);
         assert_eq!(defs, vec![(0, vec![1, 2], 3)]);
         assert_eq!(show_formula(&flat, &s, &["z".into(), "x".into(), "y".into(), "u".into()]), "(!(le(z, x) & le(z, y)) | le(z, u))");
-        let b = parse_formula("meet(meet(x, y), z) <= x", &s, &[]).unwrap();
+        let b = parse_axiom("meet(meet(x, y), z) <= x", &s).unwrap();
         let (_, defs) = flatten(&b.formula, 3);
         assert_eq!(defs, vec![(0, vec![0, 1], 3), (0, vec![3, 2], 4)]);
-        assert!(parse_formula("le(x)", &s, &[]).is_err());
-        assert!(parse_formula("x < ", &s, &[]).is_err());
-        assert!(parse_formula("x # y", &s, &[]).is_err());
+        assert!(parse_axiom("le(x)", &s).is_err());
+        assert!(parse_axiom("x < ", &s).is_err());
+        assert!(parse_axiom("x # y", &s).is_err());
+    }
+
+    #[test]
+    fn descriptions_and_constants() {
+        let s = tree_signature();
+        let atoms : Vec<String> = ["a", "b", "m"].iter().map(|x| x.to_string()).collect();
+        let d = parse_description("m = meet(a, b) & a < b & !le(a, b)", &s, &atoms).unwrap();
+        assert_eq!(d.variables, atoms);
+        assert_eq!(show_formula(&d.formula, &s, &atoms), "(m = meet(a, b) & a < b & !le(a, b))");
+        // A misspelt atom is an error.
+        assert!(parse_description("a < c", &s, &atoms).is_err());
+        // Constants are written without parentheses.
+        let c = Signature { relations : vec![], functions : vec![("zero".to_string(), 0)] };
+        let e = parse_axiom("zero <= x", &c).unwrap();
+        assert_eq!(e.variables, vec!["x"]);
+        assert_eq!(show_formula(&e.formula, &c, &e.variables), "(zero < x | zero = x)");
     }
 }

@@ -5,6 +5,7 @@ pub mod bits;
 pub mod counters;
 pub mod helpers;
 pub mod ideal;
+pub mod logic;
 pub mod mon;
 pub mod one_colour;
 pub mod parallel;
@@ -25,5 +26,3 @@ pub mod equivariant;
 pub mod tree;
 #[cfg(feature = "equivariant")]
 pub mod trivial;
-#[cfg(feature = "symbolic")]
-pub mod symbolic;
