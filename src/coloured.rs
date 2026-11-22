@@ -8,8 +8,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Display, Formatter, Result};
-use crate::atoms::AtomsWithOrd;
+use crate::atoms::{theory_of_type, Atoms, AtomsWithOrd, Orbit, SetPairOrbit, Structure};
 use crate::elements_with_atoms::PartialAut;
+use crate::logic::{Signature, Theory};
 
 /// The colour of an atom of Y: `Low` for the first copy of X, `High` for the
 /// second one. `Low < High`.
@@ -72,6 +73,54 @@ fn recolour<A : AtomsWithOrd>(set : &BTreeSet<Coloured<A>>, paut : &PartialAut<A
     set.iter().map(|y| Coloured::new(y.colour, paut.apply(&y.atom))).collect()
 }
 
+/// Y as a structure. Its signature has the relations of X, interpreted on the
+/// underlying atoms, except the order `<`, which is the order of Y; a unary
+/// relation `high`; and a binary relation `same`, which holds for two atoms
+/// with the same underlying atom. The functions of X are interpreted on the
+/// underlying atoms, and their values are low. The theory has no axioms: Y is
+/// only used inside the algorithms, through its own orbit tests, and it is not
+/// declared homogeneous.
+impl<A : AtomsWithOrd> Structure for Coloured<A> {
+    fn theory() -> &'static Theory {
+        theory_of_type::<Self>(|| {
+            let mut signature : Signature = A::theory().signature.clone();
+            signature.relations.push(("high".to_string(), 1));
+            signature.relations.push(("same".to_string(), 2));
+            Theory { signature, axioms : Vec::new() }
+        })
+    }
+
+    fn holds(r : usize, args : &[Self]) -> bool {
+        let relations = &A::theory().signature.relations;
+        if r == relations.len() {
+            args[0].colour == Colour::High
+        } else if r == relations.len() + 1 {
+            args[0].atom == args[1].atom
+        } else if relations[r].0 == "<" {
+            args[0] < args[1]
+        } else {
+            A::holds(r, &args.iter().map(|y| y.atom.clone()).collect::<Vec<_>>())
+        }
+    }
+
+    fn apply(f : usize, args : &[Self]) -> Self {
+        Coloured::new(Colour::Low, A::apply(f, &args.iter().map(|y| y.atom.clone()).collect::<Vec<_>>()))
+    }
+}
+
+/// An automorphism π of X maps a tuple of Y to another one if and only if it
+/// keeps the colours and maps the underlying tuple of atoms accordingly.
+impl<A : AtomsWithOrd> Atoms for Coloured<A> {
+    fn tuples_in_same_orbit(first : &[Self], second : &[Self]) -> bool {
+        first.len() == second.len()
+            && first.iter().zip(second).all(|(s, t)| s.colour == t.colour)
+            && A::tuples_in_same_orbit(
+                &first.iter().map(|y| y.atom.clone()).collect::<Vec<_>>(),
+                &second.iter().map(|y| y.atom.clone()).collect::<Vec<_>>(),
+            )
+    }
+}
+
 impl<A : AtomsWithOrd> AtomsWithOrd for Coloured<A> {
 
     /// An automorphism of Y preserves the order of Y, so if it maps `first`
@@ -97,14 +146,15 @@ impl<A : AtomsWithOrd> AtomsWithOrd for Coloured<A> {
     /// pairs (S', T') correspond to the orbits of pairs of their underlying
     /// atoms, which `A::orbits_in_product` lists.
     fn orbits_in_product(first : &BTreeSet<Self>, second : &BTreeSet<Self>)
-        -> Vec<(BTreeSet<Self>, BTreeSet<Self>)> {
+        -> Vec<SetPairOrbit<Self>> {
         let (u, v) = (underlying(first), underlying(second));
         A::orbits_in_product(&u, &v)
-            .into_iter()
-            .map(|(u2, v2)| {
-                let to_u2 = PartialAut::new(&u, &u2).expect("orbits_in_product returned a set in another orbit");
-                let to_v2 = PartialAut::new(&v, &v2).expect("orbits_in_product returned a set in another orbit");
-                (recolour(first, &to_u2), recolour(second, &to_v2))
+            .iter()
+            .map(|pair| {
+                let (u2, v2) = pair.representative();
+                let to_u2 = PartialAut::new(&u, u2).expect("orbits_in_product returned a set in another orbit");
+                let to_v2 = PartialAut::new(&v, v2).expect("orbits_in_product returned a set in another orbit");
+                Orbit::new((recolour(first, &to_u2), recolour(second, &to_v2)))
             })
             .collect()
     }
@@ -147,10 +197,9 @@ mod tests {
     fn check_product(first : &BTreeSet<Y>, second : &BTreeSet<Y>) {
         let reps = Y::orbits_in_product(first, second);
         for i in 0..reps.len() {
-            assert!(Y::in_same_orbit(first, &reps[i].0));
-            assert!(Y::in_same_orbit(second, &reps[i].1));
+            assert!(reps[i].evaluate(|(s, t)| Y::in_same_orbit(first, s) && Y::in_same_orbit(second, t)));
             for j in 0..i {
-                assert!(!<(BTreeSet<Y>, BTreeSet<Y>)>::tuples_in_same_orbit(&[reps[i].clone()], &[reps[j].clone()]));
+                assert!(reps[i] != reps[j]);
             }
         }
         let n = underlying(first).len() + underlying(second).len();

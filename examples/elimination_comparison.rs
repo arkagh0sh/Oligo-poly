@@ -62,7 +62,7 @@ use atomic_hilbert::atoms::Orbit;
 use atomic_hilbert::equivariant::{equivariant_groebner_basis, minimal_basis, one_colour_groebner_basis, OrbitList};
 use atomic_hilbert::ideal::{buchberger, elimination_ideal};
 use atomic_hilbert::mon::Polynomial;
-use atomic_hilbert::trivial::Var;
+use atomic_hilbert::trivial::FinOrd;
 use num_rational::BigRational;
 use num_traits::{One, Pow, Zero};
 use std::collections::BTreeSet;
@@ -71,7 +71,7 @@ use std::io::Write;
 use std::time::{Duration, Instant};
 
 type Q = BigRational;
-type P = Polynomial<Q, Var>;
+type P = Polynomial<Q, FinOrd>;
 
 /// The command-line options.
 struct Options {
@@ -144,7 +144,7 @@ fn parse(src : &str) -> Vec<P> {
 }
 
 fn x(i : u32) -> P {
-    Polynomial::var(Var(i))
+    Polynomial::var(FinOrd(i))
 }
 
 fn c(k : i64) -> P {
@@ -156,7 +156,7 @@ fn milliseconds(d : Duration) -> f64 {
 }
 
 /// The sets of variables among `vars`, as bit masks.
-fn subsets(vars : &[Var]) -> Vec<BTreeSet<Var>> {
+fn subsets(vars : &[FinOrd]) -> Vec<BTreeSet<FinOrd>> {
     (0..1usize << vars.len())
         .map(|mask| vars.iter().enumerate().filter(|(i, _)| mask >> i & 1 == 1).map(|(_, v)| *v).collect())
         .collect()
@@ -166,7 +166,7 @@ fn subsets(vars : &[Var]) -> Vec<BTreeSet<Var>> {
 /// with reduced Gröbner basis `elimination` (the elimination ideal I ∩ K[X_V]),
 /// given that they belong to it: every leading monomial of `elimination` must be
 /// divisible by the leading monomial of one of them.
-fn has_property(basis : &[P], v : &BTreeSet<Var>, elimination : &[P]) -> bool {
+fn has_property(basis : &[P], v : &BTreeSet<FinOrd>, elimination : &[P]) -> bool {
     let inside : Vec<&P> = basis.iter().filter(|h| !h.is_zero() && h.domain().is_subset(v)).collect();
     elimination.iter().all(|e| inside.iter().any(|h| e.leading_mon().is_divisible_by(&h.leading_mon())))
 }
@@ -199,7 +199,7 @@ impl Summary {
 }
 
 fn run(options : &mut Options, summary : &mut Summary, name : &str, generators : Vec<P>) {
-    let vars : Vec<Var> = generators.iter().flat_map(|g| g.domain()).collect::<BTreeSet<Var>>().into_iter().collect();
+    let vars : Vec<FinOrd> = generators.iter().flat_map(|g| g.domain()).collect::<BTreeSet<FinOrd>>().into_iter().collect();
     let sets = subsets(&vars);
     let shown : Vec<String> = generators.iter().map(|g| g.to_string()).collect();
     println!("== {name}: {} variables, {} sets V", vars.len(), sets.len());
@@ -223,7 +223,7 @@ fn run(options : &mut Options, summary : &mut Summary, name : &str, generators :
     let ordinary_time = start.elapsed();
 
     let start = Instant::now();
-    let orbits : OrbitList<Q, Var> = generators.iter().cloned().map(Orbit::new).collect();
+    let orbits : OrbitList<Q, FinOrd> = generators.iter().cloned().map(Orbit::new).collect();
     let colouring = if options.skip_colouring { None } else { Some(equivariant_groebner_basis(orbits, options.limit)) };
     let colouring_time = start.elapsed();
 
@@ -248,7 +248,7 @@ fn run(options : &mut Options, summary : &mut Summary, name : &str, generators :
 
     println!("  {:<26} {:>12} {:>6} {:>8} {:>10}", "method", "ms", "size", "minimal", "failing V");
     for outcome in &outcomes {
-        let failing : Vec<&BTreeSet<Var>> = sets
+        let failing : Vec<&BTreeSet<FinOrd>> = sets
             .iter()
             .zip(eliminations.iter())
             .filter(|(v, e)| !has_property(&outcome.basis, v, e))
@@ -324,7 +324,7 @@ fn random_ideal(seed : u64, n : u32, count : usize, terms : usize) -> Vec<P> {
                 })
             })
             .collect();
-        let vars : BTreeSet<Var> = generators.iter().flat_map(|g| g.domain()).collect();
+        let vars : BTreeSet<FinOrd> = generators.iter().flat_map(|g| g.domain()).collect();
         if generators.iter().all(|g| !g.is_zero()) && vars.len() == n as usize {
             return generators;
         }

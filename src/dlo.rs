@@ -2,7 +2,9 @@ use rug::Rational;
 use std::collections::BTreeSet;
 use std::fmt::{Debug, Display, Formatter, Result};
 use itertools::Itertools;
+use std::sync::OnceLock;
 use crate::elements_with_atoms::{ElementsWithAtoms, PartialAut};
+use crate::logic::{Signature, Theory, LINEAR_ORDER};
 
 use super::atoms::*;
 
@@ -32,11 +34,32 @@ impl Display for DLO {
     }
 }
 
+/// (Q, <) as a structure: its signature has only the order `<`, and its finite
+/// substructures are the finite linear orders.
+impl Structure for DLO {
+    fn theory() -> &'static Theory {
+        static THEORY : OnceLock<Theory> = OnceLock::new();
+        THEORY.get_or_init(|| Theory::new(Signature::new(&[("<", 2)], &[]), &LINEAR_ORDER).unwrap())
+    }
+
+    fn holds(r : usize, args : &[Self]) -> bool {
+        assert_eq!(r, 0, "(Q, <) has only the relation <");
+        args[0] < args[1]
+    }
+
+    fn apply(_ : usize, _ : &[Self]) -> Self {
+        panic!("(Q, <) has no functions")
+    }
+}
+
+/// (Q, <) is homogeneous: every order-preserving bijection between finite sets
+/// extends to an automorphism.
+impl HomogeneousStructure for DLO {}
+
 impl AtomsWithOrd for DLO {
 
-    /// (Q, <) is homogeneous: every order-preserving bijection between finite
-    /// sets extends to an automorphism. So two finite sets are in the same orbit
-    /// if and only if they have the same size.
+    /// Two finite sets are in the same orbit if and only if they have the same
+    /// size. This is faster than the default, and agrees with it (see the tests).
     fn in_same_orbit(first : &BTreeSet<Self>, second : &BTreeSet<Self>) -> bool {
         first.len() == second.len()
     }
@@ -46,7 +69,7 @@ impl AtomsWithOrd for DLO {
     /// for some k with max(n, m) <= k <= n + m, every element of {1, ..., k} not in
     /// S is in T, and T contains n + m - k elements of S.
     fn orbits_in_product(first : &BTreeSet<Self>, second : &BTreeSet<Self>)
-        -> Vec<(BTreeSet<Self>, BTreeSet<Self>)> {
+        -> Vec<SetPairOrbit<Self>> {
         let (n, m) = (first.len(), second.len());
         let atom = |i : usize| DLO::new(Rational::from(i as u64));
         let mut reps = Vec::new();
@@ -56,7 +79,7 @@ impl AtomsWithOrd for DLO {
                 for common in s.iter().cloned().combinations(n + m - k) {
                     let s_atoms : BTreeSet<DLO> = s.iter().map(|&i| atom(i)).collect();
                     let t_atoms : BTreeSet<DLO> = outside_s.iter().chain(common.iter()).map(|&i| atom(i)).collect();
-                    reps.push((s_atoms, t_atoms));
+                    reps.push(Orbit::new((s_atoms, t_atoms)));
                 }
             }
         }
@@ -121,10 +144,9 @@ mod tests {
                 let second = set(&(1..=m as i64).collect::<Vec<_>>());
                 let reps = DLO::orbits_in_product(&first, &second);
                 for i in 0..reps.len() {
-                    assert_eq!(reps[i].0.len(), n);
-                    assert_eq!(reps[i].1.len(), m);
+                    assert_eq!(reps[i].evaluate(|(s, t)| (s.len(), t.len())), (n, m));
                     for j in 0..i {
-                        assert!(!SetPair::tuples_in_same_orbit(&[reps[i].clone()], &[reps[j].clone()]));
+                        assert!(reps[i] != reps[j]);
                     }
                 }
                 assert_eq!(reps.len(), brute_force_orbit_count(n, m), "n = {n}, m = {m}");
@@ -132,6 +154,24 @@ mod tests {
         }
         // Q^2 splits into the three orbits a < b, a = b and a > b.
         assert_eq!(DLO::orbits_in_product(&set(&[7]), &set(&[7])).len(), 3);
+    }
+
+    /// The canonical test of homogeneous structures agrees with the test of
+    /// `in_same_orbit` for (Q, <): same size.
+    #[test]
+    fn canonical_orbit_test() {
+        use crate::atoms::homogeneous_tuples_in_same_orbit;
+        let sets : Vec<Vec<DLO>> = (0..4usize)
+            .flat_map(|k| (1..=5i64).combinations(k).map(|c| c.into_iter().map(d).collect::<Vec<_>>()))
+            .collect();
+        for a in &sets {
+            for b in &sets {
+                assert_eq!(homogeneous_tuples_in_same_orbit(a, b), a.len() == b.len());
+            }
+        }
+        // As tuples, the order matters: (1, 2) and (2, 1) are in different orbits.
+        assert!(!homogeneous_tuples_in_same_orbit(&[d(1), d(2)], &[d(2), d(1)]));
+        assert!(!homogeneous_tuples_in_same_orbit(&[d(1), d(1)], &[d(1), d(2)]));
     }
 
     #[test]

@@ -1,8 +1,9 @@
 //! Signatures, terms and quantifier-free formulas, with a parser.
 //!
-//! A structure has a built-in linear order `<` and equality `=`, and the
-//! relation and function symbols of its signature; a function symbol with no
-//! arguments is a constant. A formula is quantifier free, and it is used in two
+//! A structure interprets equality `=` and the relation and function symbols of
+//! its signature; a function symbol with no arguments is a constant. A linear
+//! order is an ordinary binary relation symbol named `<`, present in the
+//! signatures of ordered structures. A formula is quantifier free, and it is used in two
 //! ways:
 //!
 //! - an [`Axiom`] is a formula whose variables are universally quantified; a
@@ -16,8 +17,9 @@
 //! - `A | B`;
 //! - `A & B`;
 //! - `!A`, `(A)`, `true`, `false`, and the atoms:
-//!   `s < t`, `s > t`, `s <= t` (meaning `s < t | s = t`), `s >= t`, `s = t`,
-//!   `s != t`, and `R(t1, ..., tk)` for a relation symbol R.
+//!   `s = t`, `s != t`, `R(t1, ..., tk)` for a relation symbol R, and, when the
+//!   signature has the relation `<`, `s < t`, `s > t`, `s <= t` (meaning
+//!   `s < t | s = t`) and `s >= t`.
 //!
 //! A term is a variable (an identifier that is not a symbol of the signature),
 //! a constant `c`, or `f(t1, ..., tk)` for a function symbol f with k >= 1
@@ -55,8 +57,6 @@ pub enum Term {
 pub enum Formula {
     True,
     False,
-    /// The built-in linear order.
-    Less(Term, Term),
     Eq(Term, Term),
     Rel(usize, Vec<Term>),
     Not(Box<Formula>),
@@ -78,7 +78,6 @@ impl Formula {
         match self {
             Formula::True => Formula::True,
             Formula::False => Formula::False,
-            Formula::Less(s, t) => Formula::Less(f(s), f(t)),
             Formula::Eq(s, t) => Formula::Eq(f(s), f(t)),
             Formula::Rel(r, ts) => Formula::Rel(*r, ts.iter().map(&mut *f).collect()),
             Formula::Not(a) => Formula::negate(a.map_terms(f)),
@@ -91,7 +90,7 @@ impl Formula {
     pub fn for_each_term(&self, f : &mut impl FnMut(&Term)) {
         match self {
             Formula::True | Formula::False => {}
-            Formula::Less(s, t) | Formula::Eq(s, t) => {
+            Formula::Eq(s, t) => {
                 f(s);
                 f(t);
             }
@@ -118,12 +117,33 @@ pub struct Description {
 }
 
 /// A signature with axioms: the finite structures of the signature that
-/// satisfy the axioms (and in which `<` is a linear order) are the finite
-/// substructures of the structure of the atoms.
+/// satisfy the axioms are the finite substructures of the structure of the
+/// atoms.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Theory {
     pub signature : Signature,
     pub axioms : Vec<Axiom>,
+}
+
+/// The axioms of a strict linear order `<`.
+pub const LINEAR_ORDER : [&str; 3] = ["!(x < x)", "x < y & y < z -> x < z", "x < y | x = y | y < x"];
+
+impl Theory {
+    /// The theory with the given signature and axioms, written as text.
+    pub fn new(signature : Signature, axioms : &[&str]) -> Result<Theory, ParseError> {
+        let axioms = axioms.iter().map(|a| parse_axiom(a, &signature)).collect::<Result<Vec<_>, _>>()?;
+        Ok(Theory { signature, axioms })
+    }
+}
+
+impl Signature {
+    /// The signature with the given relation and function symbols and arities.
+    pub fn new(relations : &[(&str, usize)], functions : &[(&str, usize)]) -> Signature {
+        Signature {
+            relations : relations.iter().map(|(n, k)| (n.to_string(), *k)).collect(),
+            functions : functions.iter().map(|(n, k)| (n.to_string(), *k)).collect(),
+        }
+    }
 }
 
 /// An error of the parser, with a message.
@@ -286,11 +306,17 @@ impl Parser<'_> {
                 let op = self.peek().cloned();
                 self.pos += 1;
                 let t = self.term()?;
+                let less = |a : Term, b : Term| -> Result<Formula, ParseError> {
+                    match self.signature.relation("<") {
+                        Some(r) => Ok(Formula::Rel(r, vec![a, b])),
+                        None => Err(ParseError("this signature has no order <".to_string())),
+                    }
+                };
                 match op {
-                    Some(Token::Less) => Ok(Formula::Less(s, t)),
-                    Some(Token::Greater) => Ok(Formula::Less(t, s)),
-                    Some(Token::LessEq) => Ok(Formula::Or(vec![Formula::Less(s.clone(), t.clone()), Formula::Eq(s, t)])),
-                    Some(Token::GreaterEq) => Ok(Formula::Or(vec![Formula::Less(t.clone(), s.clone()), Formula::Eq(s, t)])),
+                    Some(Token::Less) => less(s, t),
+                    Some(Token::Greater) => less(t, s),
+                    Some(Token::LessEq) => Ok(Formula::Or(vec![less(s.clone(), t.clone())?, Formula::Eq(s, t)])),
+                    Some(Token::GreaterEq) => Ok(Formula::Or(vec![less(t.clone(), s.clone())?, Formula::Eq(s, t)])),
                     Some(Token::Equal) => Ok(Formula::Eq(s, t)),
                     Some(Token::NotEqual) => Ok(Formula::negate(Formula::Eq(s, t))),
                     other => Err(ParseError(format!("expected a comparison, found {other:?}"))),
@@ -389,8 +415,8 @@ pub fn show_formula(f : &Formula, signature : &Signature, names : &[String]) -> 
     match f {
         Formula::True => "true".to_string(),
         Formula::False => "false".to_string(),
-        Formula::Less(a, b) => format!("{} < {}", t(a), t(b)),
         Formula::Eq(a, b) => format!("{} = {}", t(a), t(b)),
+        Formula::Rel(r, args) if signature.relations[*r].0 == "<" => format!("{} < {}", t(&args[0]), t(&args[1])),
         Formula::Rel(r, args) => format!("{}({})", signature.relations[*r].0, args.iter().map(t).collect::<Vec<_>>().join(", ")),
         Formula::Not(a) => match a.as_ref() {
             Formula::Eq(x, y) => format!("{} != {}", t(x), t(y)),
@@ -446,7 +472,7 @@ mod tests {
     use super::*;
 
     fn tree_signature() -> Signature {
-        Signature { relations : vec![("le".to_string(), 2)], functions : vec![("meet".to_string(), 2)] }
+        Signature { relations : vec![("<".to_string(), 2), ("le".to_string(), 2)], functions : vec![("meet".to_string(), 2)] }
     }
 
     #[test]
@@ -475,9 +501,13 @@ mod tests {
         // A misspelt atom is an error.
         assert!(parse_description("a < c", &s, &atoms).is_err());
         // Constants are written without parentheses.
-        let c = Signature { relations : vec![], functions : vec![("zero".to_string(), 0)] };
+        let c = Signature { relations : vec![("<".to_string(), 2)], functions : vec![("zero".to_string(), 0)] };
         let e = parse_axiom("zero <= x", &c).unwrap();
         assert_eq!(e.variables, vec!["x"]);
         assert_eq!(show_formula(&e.formula, &c, &e.variables), "(zero < x | zero = x)");
+        // Without the relation <, the order cannot be used.
+        let unordered = Signature { relations : vec![("E".to_string(), 2)], functions : vec![] };
+        assert!(parse_axiom("x < y", &unordered).is_err());
+        assert!(parse_axiom("E(x, y) -> E(y, x)", &unordered).is_ok());
     }
 }

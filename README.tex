@@ -348,15 +348,37 @@ Since $\mathsf{supp}(b)$ supports $b$, we get $\pi'^{-1}\pi(b) = b$, that is, $\
 So $\pi(b)$ can be computed from the partial automorphism from $\mathsf{supp}(b)$ onto $\pi(\mathsf{supp}(b))$.
 \end{remark}
 %
-\subsection{\code{trait AtomsWithOrd}}
+\subsection{The traits for atoms}
 %
-This gives the framework for working with \emph{computationally oligomorphic} ordered relational structures.
-To make a \code{struct A} satisfy this \code{trait},
-one has to implement two basic operations.
+The atoms are described by four \code{trait}s.
 \begin{enumerate}
-\item \code{in\_same\_orbit(S, T)}: This function checks whether some automorphism maps the finite set \code{S : BTreeSet<A>} onto the finite set \code{T : BTreeSet<A>}.
-\item \code{orbits\_in\_product(S, T)}: This function returns one representative $(S', T')$ for each orbit of pairs in the product of the orbit of \code{S} and the orbit of \code{T}.
+\item \code{Structure}: the atoms form a structure over a fixed theory.
+  The function \code{theory()} returns the theory: a signature (relation and function symbols with their arities) and a list of axioms.
+  The functions \code{holds(r, args)} and \code{apply(f, args)} interpret the relation number \code{r} and the function number \code{f}.
+  Every implementation is thus connected to its signature.
+\item \code{HomogeneousStructure}: an empty marker \code{trait}.
+  By implementing it, the user states that the structure is homogeneous, that is,
+  every isomorphism between finitely generated substructures extends to an automorphism.
+  The library does not check this.
+\item \code{Atoms}: the structure has a test \code{tuples\_in\_same\_orbit(first, second)},
+  which checks whether some automorphism maps the tuple \code{first} to the tuple \code{second}.
+  Every homogeneous structure gets this test for free:
+  it maps \code{first[i]} to \code{second[i]}, closes the map under the functions,
+  and checks that it is a well-defined bijection which preserves all relations
+  (\code{homogeneous\_tuples\_in\_same\_orbit}).
+  A structure which is not homogeneous implements \code{Atoms} directly.
+\item \code{AtomsWithOrd}: atoms which are moreover linearly ordered, as required by the monomial orders.
+  It provides two operations.
+  \begin{enumerate}
+  \item \code{in\_same\_orbit(S, T)}: This function checks whether some automorphism maps the finite set \code{S : BTreeSet<A>} onto the finite set \code{T : BTreeSet<A>}.
+    By default, it compares the sorted tuples with \code{tuples\_in\_same\_orbit}.
+  \item \code{orbits\_in\_product(S, T)}: This function returns the orbits of pairs in the product of the orbit of \code{S} and the orbit of \code{T}.
+  \end{enumerate}
 \end{enumerate}
+%
+The library implements these traits for \code{DLO} (homogeneous), \code{Tree} (homogeneous),
+\code{FinOrd} (a finite linear order with the trivial group, not homogeneous)
+and \code{Coloured<A>} (the colouring $Y = X + X$ used by the algorithm).
 %
 \begin{example}
 In $\dloQ$, two finite sets are in the same orbit if and only if they have the same size,

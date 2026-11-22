@@ -28,8 +28,10 @@ use rug::Rational;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::fmt::{Debug, Display, Formatter, Result};
-use crate::atoms::AtomsWithOrd;
+use std::sync::OnceLock;
+use crate::atoms::{AtomsWithOrd, HomogeneousStructure, Orbit, SetPairOrbit, Structure};
 use crate::elements_with_atoms::{ElementsWithAtoms, PartialAut};
+use crate::logic::{Signature, Theory, LINEAR_ORDER};
 
 /// A point of the dense meet-tree. The sequence is private, so programs can only
 /// use the tree order, the meet and the lexicographic order.
@@ -255,8 +257,56 @@ fn extend(fixed : &BTreeSet<Tree>, chosen : &mut Vec<Tree>, target : &[Tree], ou
     }
 }
 
+/// The axioms of finite meet-trees with a lexicographic order, besides those of
+/// the linear order `<`: `le` is a partial order whose elements below any
+/// element form a chain, `meet` is the greatest lower bound, and `<` satisfies
+/// (L1) and (L2) of `README.tex`.
+const TREE_AXIOMS : [&str; 10] = [
+    "le(x, x)",
+    "le(x, y) & le(y, x) -> x = y",
+    "le(x, y) & le(y, z) -> le(x, z)",
+    "le(y, x) & le(z, x) -> le(y, z) | le(z, y)",
+    "le(meet(x, y), x)",
+    "le(meet(x, y), y)",
+    "le(z, x) & le(z, y) -> le(z, meet(x, y))",
+    "le(x, y) -> x <= y",
+    "le(x, y) & le(x, z) & y < w & w < z -> le(x, w)",
+    "meet(x, y) = meet(y, x)",
+];
+
+/// T_< as a structure: the lexicographic order `<`, the tree order `le` and the
+/// meet `meet`.
+impl Structure for Tree {
+    fn theory() -> &'static Theory {
+        static THEORY : OnceLock<Theory> = OnceLock::new();
+        THEORY.get_or_init(|| {
+            let signature = Signature::new(&[("<", 2), ("le", 2)], &[("meet", 2)]);
+            Theory::new(signature, &[&LINEAR_ORDER[..], &TREE_AXIOMS[..]].concat()).unwrap()
+        })
+    }
+
+    fn holds(r : usize, args : &[Self]) -> bool {
+        match r {
+            0 => args[0] < args[1],
+            1 => args[0].is_below(&args[1]),
+            _ => panic!("T_< has two relations"),
+        }
+    }
+
+    fn apply(f : usize, args : &[Self]) -> Self {
+        assert_eq!(f, 0, "T_< has one function");
+        args[0].meet(&args[1])
+    }
+}
+
+/// T_< is homogeneous: it is the Fraïssé limit of the finite meet-trees with a
+/// lexicographic order (see `README.tex`).
+impl HomogeneousStructure for Tree {}
+
 impl AtomsWithOrd for Tree {
 
+    /// Faster than the default, and agrees with it (see the tests).
+    ///
     /// Two finite sets S and T are in the same orbit if and only if the
     /// increasing bijection f from S onto T satisfies: a ∧ b <= c if and only if
     /// f(a) ∧ f(b) <= f(c), for all a, b, c in S. Indeed, this relation
@@ -275,11 +325,11 @@ impl AtomsWithOrd for Tree {
     /// new point among the representatives of `one_point_extensions`. Each orbit
     /// is obtained exactly once.
     fn orbits_in_product(first : &BTreeSet<Self>, second : &BTreeSet<Self>)
-        -> Vec<(BTreeSet<Self>, BTreeSet<Self>)> {
+        -> Vec<SetPairOrbit<Self>> {
         let target : Vec<Tree> = second.iter().cloned().collect();
         let mut out = Vec::new();
         extend(first, &mut Vec::new(), &target, &mut out);
-        out.into_iter().map(|t| (first.clone(), t)).collect()
+        out.into_iter().map(|t| Orbit::new((first.clone(), t))).collect()
     }
 }
 
@@ -469,14 +519,44 @@ mod tests {
                 for t in set_types(m) {
                     let reps = Tree::orbits_in_product(&s, &t);
                     for r in &reps {
-                        assert!(Tree::in_same_orbit(&s, &r.0) && Tree::in_same_orbit(&t, &r.1));
+                        assert!(r.evaluate(|(a, b)| Tree::in_same_orbit(&s, a) && Tree::in_same_orbit(&t, b)));
                     }
-                    let keys : HashSet<_> = reps.iter().map(pair_key).collect();
+                    let keys : HashSet<_> = reps.iter().map(|r| r.evaluate(pair_key)).collect();
                     assert_eq!(keys.len(), reps.len(), "two representatives of the same orbit");
                     total += reps.len();
                 }
             }
             assert_eq!(total, expected, "n = {n}, m = {m}");
+        }
+    }
+
+    /// The points of the model satisfy the axioms of T_<.
+    #[test]
+    fn the_model_satisfies_the_axioms() {
+        use crate::atoms::satisfies;
+        let points = pool(3, &[0, 1]);
+        let points : Vec<Tree> = points.into_iter().step_by(2).collect();
+        for axiom in &Tree::theory().axioms {
+            let k = axiom.variables.len();
+            for args in itertools::repeat_n(points.iter().cloned(), k).multi_cartesian_product() {
+                assert!(satisfies(&axiom.formula, &args), "{:?} fails at {args:?}", axiom.variables);
+            }
+        }
+    }
+
+    /// The canonical test of homogeneous structures agrees with the test of
+    /// `in_same_orbit` for T_<, on sets of a pool of points.
+    #[test]
+    fn canonical_orbit_test() {
+        use crate::atoms::homogeneous_tuples_in_same_orbit;
+        let points = pool(3, &[0, 1]);
+        let sets : Vec<Vec<Tree>> = (1..=3).flat_map(|k| points.iter().cloned().combinations(k).map(|c| c.into_iter().sorted().collect::<Vec<_>>())).collect();
+        let sets : Vec<Vec<Tree>> = sets.into_iter().step_by(7).collect();
+        for a in &sets {
+            for b in &sets {
+                let (sa, sb) : (BTreeSet<Tree>, BTreeSet<Tree>) = (a.iter().cloned().collect(), b.iter().cloned().collect());
+                assert_eq!(homogeneous_tuples_in_same_orbit(a, b), Tree::in_same_orbit(&sa, &sb), "{a:?} {b:?}");
+            }
         }
     }
 }

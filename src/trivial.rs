@@ -1,4 +1,6 @@
-//! Finitely many variables x1, x2, ... with the trivial group.
+//! Finitely many variables x1, x2, ... with the trivial group: the atoms
+//! `FinOrd(i)` of a finite linear order, whose only automorphism is the
+//! identity.
 //!
 //! The only automorphism is the identity, so every set of variables is its own
 //! orbit, and an orbit of polynomials is a single polynomial. With these atoms:
@@ -18,26 +20,53 @@
 
 use std::collections::BTreeSet;
 use std::fmt::{Debug, Display, Formatter, Result};
-use crate::atoms::AtomsWithOrd;
+use std::sync::OnceLock;
+use crate::atoms::{Atoms, AtomsWithOrd, Orbit, SetPairOrbit, Structure};
 use crate::elements_with_atoms::{ElementsWithAtoms, PartialAut};
+use crate::logic::{Signature, Theory, LINEAR_ORDER};
 
 /// The variable x_i. Variables are ordered by their index.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Var(pub u32);
+pub struct FinOrd(pub u32);
 
-impl Display for Var {
+impl Display for FinOrd {
     fn fmt(&self, f : &mut Formatter<'_>) -> Result {
         write!(f, "x{}", self.0)
     }
 }
 
-impl Debug for Var {
+impl Debug for FinOrd {
     fn fmt(&self, f : &mut Formatter<'_>) -> Result {
         write!(f, "x{}", self.0)
     }
 }
 
-impl AtomsWithOrd for Var {
+/// The finite linear order: its signature has only the order `<`.
+impl Structure for FinOrd {
+    fn theory() -> &'static Theory {
+        static THEORY : OnceLock<Theory> = OnceLock::new();
+        THEORY.get_or_init(|| Theory::new(Signature::new(&[("<", 2)], &[]), &LINEAR_ORDER).unwrap())
+    }
+
+    fn holds(r : usize, args : &[Self]) -> bool {
+        assert_eq!(r, 0, "a finite linear order has only the relation <");
+        args[0] < args[1]
+    }
+
+    fn apply(_ : usize, _ : &[Self]) -> Self {
+        panic!("a finite linear order has no functions")
+    }
+}
+
+/// The automorphism group is trivial, so the structure is not declared
+/// homogeneous: a tuple is only in the orbit of itself.
+impl Atoms for FinOrd {
+    fn tuples_in_same_orbit(first : &[Self], second : &[Self]) -> bool {
+        first == second
+    }
+}
+
+impl AtomsWithOrd for FinOrd {
     /// Only the identity maps a set onto a set.
     fn in_same_orbit(first : &BTreeSet<Self>, second : &BTreeSet<Self>) -> bool {
         first == second
@@ -45,18 +74,18 @@ impl AtomsWithOrd for Var {
 
     /// Every pair of sets is its own orbit.
     fn orbits_in_product(first : &BTreeSet<Self>, second : &BTreeSet<Self>)
-        -> Vec<(BTreeSet<Self>, BTreeSet<Self>)> {
-        vec![(first.clone(), second.clone())]
+        -> Vec<SetPairOrbit<Self>> {
+        vec![Orbit::new((first.clone(), second.clone()))]
     }
 }
 
 /// A variable is an element with atoms, with support {x}.
-impl ElementsWithAtoms<Var> for Var {
-    fn support(&self) -> BTreeSet<Var> {
+impl ElementsWithAtoms<FinOrd> for FinOrd {
+    fn support(&self) -> BTreeSet<FinOrd> {
         BTreeSet::from([*self])
     }
 
-    fn apply_paut(&self, paut : &PartialAut<Var>) -> Self {
+    fn apply_paut(&self, paut : &PartialAut<FinOrd>) -> Self {
         paut.apply(self)
     }
 }
@@ -71,10 +100,10 @@ mod tests {
     use num_rational::Rational64 as Q;
     use num_traits::Zero;
 
-    type P = Polynomial<Q, Var>;
+    type P = Polynomial<Q, FinOrd>;
 
     fn x(i : u32) -> P {
-        Polynomial::var(Var(i))
+        Polynomial::var(FinOrd(i))
     }
 
     fn c(k : i64) -> P {
@@ -82,16 +111,16 @@ mod tests {
     }
 
     /// The polynomials of a list of orbits: each orbit is a single polynomial.
-    fn polynomials(orbits : &[PolynomialOrbit<Q, Var>]) -> Vec<P> {
+    fn polynomials(orbits : &[PolynomialOrbit<Q, FinOrd>]) -> Vec<P> {
         orbits.iter().map(|o| o.evaluate(|p| p.clone())).collect()
     }
 
     /// The sets V of variables among x1, ..., xn for which the elements of `basis`
     /// in K[X_V] do not form a Gröbner basis of I ∩ K[X_V], where I is generated
     /// by `generators` and `basis` is contained in I.
-    fn failing_sets(generators : &[P], basis : &[P], n : u32) -> Vec<BTreeSet<Var>> {
+    fn failing_sets(generators : &[P], basis : &[P], n : u32) -> Vec<BTreeSet<FinOrd>> {
         (0..1u32 << n)
-            .map(|mask| (1..=n).filter(|i| mask >> (i - 1) & 1 == 1).map(Var).collect::<BTreeSet<Var>>())
+            .map(|mask| (1..=n).filter(|i| mask >> (i - 1) & 1 == 1).map(FinOrd).collect::<BTreeSet<FinOrd>>())
             .filter(|v| {
                 let inside : Vec<&P> = basis.iter().filter(|h| h.domain().is_subset(v)).collect();
                 !elimination_ideal(generators, v).iter().all(|e| {
@@ -102,12 +131,12 @@ mod tests {
     }
 
     fn colouring(generators : &[P]) -> Vec<P> {
-        let orbits : Vec<PolynomialOrbit<Q, Var>> = generators.iter().cloned().map(Orbit::new).collect();
+        let orbits : Vec<PolynomialOrbit<Q, FinOrd>> = generators.iter().cloned().map(Orbit::new).collect();
         polynomials(&equivariant_groebner_basis(orbits, 500).ok().unwrap())
     }
 
     fn one_colour(generators : &[P]) -> Vec<P> {
-        let orbits : Vec<PolynomialOrbit<Q, Var>> = generators.iter().cloned().map(Orbit::new).collect();
+        let orbits : Vec<PolynomialOrbit<Q, FinOrd>> = generators.iter().cloned().map(Orbit::new).collect();
         polynomials(&one_colour_groebner_basis(orbits, 500).ok().unwrap())
     }
 
@@ -117,7 +146,7 @@ mod tests {
         // element in K[x2], but x2^2 = (x2 + x1)(x2 - x1) + x1^2 is in I.
         let generators = vec![x(2) - x(1), x(1) * x(1)];
         let ordinary = buchberger(generators.clone());
-        assert_eq!(failing_sets(&generators, &ordinary, 2), vec![BTreeSet::from([Var(2)])]);
+        assert_eq!(failing_sets(&generators, &ordinary, 2), vec![BTreeSet::from([FinOrd(2)])]);
         let basis = colouring(&generators);
         assert!(basis.contains(&(x(2) * x(2))));
         assert!(failing_sets(&generators, &basis, 2).is_empty());
@@ -132,7 +161,7 @@ mod tests {
         assert!(failing_sets(&generators, &one_colour(&generators), 3).is_empty());
         // The ordinary basis misses the cuspidal cubic in K[x2, x3].
         let ordinary = buchberger(generators.clone());
-        assert_eq!(failing_sets(&generators, &ordinary, 3), vec![BTreeSet::from([Var(2), Var(3)])]);
+        assert_eq!(failing_sets(&generators, &ordinary, 3), vec![BTreeSet::from([FinOrd(2), FinOrd(3)])]);
     }
 
     /// A small deterministic pseudo-random generator (xorshift).
