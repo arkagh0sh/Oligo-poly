@@ -160,7 +160,7 @@ impl<A : AtomsWithOrd> AtomsWithOrd for Coloured<A> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "equivariant"))]
 mod tests {
     use super::*;
     use crate::dlo::DLO;

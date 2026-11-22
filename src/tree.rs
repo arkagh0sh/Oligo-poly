@@ -31,7 +31,7 @@ use std::fmt::{Debug, Display, Formatter, Result};
 use std::sync::OnceLock;
 use crate::atoms::{AtomsWithOrd, HomogeneousStructure, Orbit, SetPairOrbit, Structure};
 use crate::elements_with_atoms::{ElementsWithAtoms, PartialAut};
-use crate::logic::{Signature, Theory, LINEAR_ORDER};
+use crate::logic::{Signature, Theory, LINEAR_ORDER, TREE_AXIOMS};
 
 /// A point of the dense meet-tree. The sequence is private, so programs can only
 /// use the tree order, the meet and the lexicographic order.
@@ -256,23 +256,6 @@ fn extend(fixed : &BTreeSet<Tree>, chosen : &mut Vec<Tree>, target : &[Tree], ou
         chosen.pop();
     }
 }
-
-/// The axioms of finite meet-trees with a lexicographic order, besides those of
-/// the linear order `<`: `le` is a partial order whose elements below any
-/// element form a chain, `meet` is the greatest lower bound, and `<` satisfies
-/// (L1) and (L2) of `README.tex`.
-const TREE_AXIOMS : [&str; 10] = [
-    "le(x, x)",
-    "le(x, y) & le(y, x) -> x = y",
-    "le(x, y) & le(y, z) -> le(x, z)",
-    "le(y, x) & le(z, x) -> le(y, z) | le(z, y)",
-    "le(meet(x, y), x)",
-    "le(meet(x, y), y)",
-    "le(z, x) & le(z, y) -> le(z, meet(x, y))",
-    "le(x, y) -> x <= y",
-    "le(x, y) & le(x, z) & y < w & w < z -> le(x, w)",
-    "meet(x, y) = meet(y, x)",
-];
 
 /// T_< as a structure: the lexicographic order `<`, the tree order `le` and the
 /// meet `meet`.

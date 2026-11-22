@@ -10,19 +10,24 @@ pub mod mon;
 pub mod one_colour;
 pub mod parallel;
 
-// The equivariant framework is still under development. It is only built with
-// `cargo build --features equivariant`.
-#[cfg(feature = "equivariant")]
+// The equivariant framework and the symbolic atoms, built with
+// `cargo build --features atoms`.
+#[cfg(feature = "atoms")]
 pub mod atoms;
-#[cfg(feature = "equivariant")]
+#[cfg(feature = "atoms")]
 pub mod coloured;
+#[cfg(feature = "atoms")]
+pub mod elements_with_atoms;
+#[cfg(feature = "atoms")]
+pub mod equivariant;
+#[cfg(feature = "atoms")]
+pub mod symbolic;
+#[cfg(feature = "atoms")]
+pub mod trivial;
+
+// The concrete atoms, which use rug (GMP), built with
+// `cargo build --features equivariant`.
 #[cfg(feature = "equivariant")]
 pub mod dlo;
 #[cfg(feature = "equivariant")]
-pub mod elements_with_atoms;
-#[cfg(feature = "equivariant")]
-pub mod equivariant;
-#[cfg(feature = "equivariant")]
 pub mod tree;
-#[cfg(feature = "equivariant")]
-pub mod trivial;

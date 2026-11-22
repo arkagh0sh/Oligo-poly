@@ -14,7 +14,18 @@ A. Ghosh and A. Lopez, *Computability of equivariant Gröbner bases* (2025).
   with the dense linear order (Q, <) and the universal dense meet-tree with a
   lexicographic order T_< as examples
   (`src/atoms.rs`, `src/elements_with_atoms.rs`, `src/dlo.rs`, `src/tree.rs`).
-  It is only built with the Cargo feature `equivariant`.
+  The atoms implement the traits `Structure` (a theory and the interpretation
+  of its symbols), `HomogeneousStructure` (a declaration, which gives the
+  canonical orbit test), `Atoms` and `AtomsWithOrd`.
+- Symbolic atoms (`src/symbolic.rs`): the atoms of a homogeneous structure
+  given only by its theory, such as `DenseOrder` and `MeetTree`. `orbit_of`
+  turns a description such as `x < y & !le(x, y) & m = meet(x, y)` into the
+  orbit it defines, with the errors `InconsistentFormula` and
+  `AmbiguousFormula`. New orbits are found by a search for finite models
+  with the SAT solver varisat.
+- The framework and the symbolic atoms are built with the Cargo feature
+  `atoms`, which is pure Rust and also builds for WebAssembly. The feature
+  `equivariant` adds `DLO` and `Tree`, which use the crate rug (GMP).
 - The equivariant Buchberger algorithm, in which a polynomial f is only
   reduced by elements h with supp(h) ⊆ supp(f) (`src/equivariant.rs`, example
   `equivariant_demo`). `equivariant_buchberger` computes a weak equivariant
@@ -27,6 +38,7 @@ A. Ghosh and A. Lopez, *Computability of equivariant Gröbner bases* (2025).
 
 ```sh
 cargo test
+cargo test --features atoms         # the framework and the symbolic atoms
 cargo test --features equivariant   # builds the crate rug, which compiles GMP
 cargo run --release --features equivariant --example equivariant_demo
 cargo run --release --features equivariant --example finite_comparison

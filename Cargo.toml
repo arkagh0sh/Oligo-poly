@@ -4,14 +4,17 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-# The equivariant framework (atoms.rs, dlo.rs, elements_with_atoms.rs) is still
-# under development and is only built when this feature is enabled.
-equivariant = ["dep:rug", "dep:itertools"]
+# The equivariant framework and the symbolic atoms. They are pure Rust, so they
+# also build for WebAssembly.
+atoms = ["dep:itertools", "dep:varisat"]
+# The concrete atoms DLO and Tree as well, which use rug (GMP).
+equivariant = ["atoms", "dep:rug"]
 
 [dependencies]
 itertools = { version = "0.14.0", optional = true }
 num-traits = "0.2"
 rug = { version = "1.27", optional = true }
+varisat = { version = "0.2.2", optional = true }
 
 [dev-dependencies]
 num-rational = "0.4"

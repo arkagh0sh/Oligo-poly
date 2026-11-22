@@ -128,6 +128,23 @@ pub struct Theory {
 /// The axioms of a strict linear order `<`.
 pub const LINEAR_ORDER : [&str; 3] = ["!(x < x)", "x < y & y < z -> x < z", "x < y | x = y | y < x"];
 
+/// The axioms of finite meet-trees with a lexicographic order, besides those of
+/// the linear order `<`: `le` is a partial order whose elements below any
+/// element form a chain, `meet` is the greatest lower bound, and `<` satisfies
+/// (L1) and (L2) of `README.tex`.
+pub const TREE_AXIOMS : [&str; 10] = [
+    "le(x, x)",
+    "le(x, y) & le(y, x) -> x = y",
+    "le(x, y) & le(y, z) -> le(x, z)",
+    "le(y, x) & le(z, x) -> le(y, z) | le(z, y)",
+    "le(meet(x, y), x)",
+    "le(meet(x, y), y)",
+    "le(z, x) & le(z, y) -> le(z, meet(x, y))",
+    "le(x, y) -> x <= y",
+    "le(x, y) & le(x, z) & y < w & w < z -> le(x, w)",
+    "meet(x, y) = meet(y, x)",
+];
+
 impl Theory {
     /// The theory with the given signature and axioms, written as text.
     pub fn new(signature : Signature, axioms : &[&str]) -> Result<Theory, ParseError> {

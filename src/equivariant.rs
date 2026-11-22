@@ -372,7 +372,7 @@ pub fn reduces_to_zero<F : Field, A : AtomsWithOrd>(f : &Polynomial<F, A>, orbit
     equivariant_normal_form(f.clone(), orbits).is_zero()
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "equivariant"))]
 mod tests {
     use super::*;
     use crate::dlo::DLO;
