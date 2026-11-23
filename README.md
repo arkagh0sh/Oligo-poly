@@ -23,6 +23,10 @@ A. Ghosh and A. Lopez, *Computability of equivariant Gröbner bases* (2025).
   orbit it defines, with the errors `InconsistentFormula` and
   `AmbiguousFormula`. New orbits are found by a search for finite models
   with the SAT solver varisat.
+- Products of atoms (`src/product.rs`): `Product<A1, A2>` has the pairs of
+  atoms, ordered lexicographically, with the product of the two groups. The
+  colouring of the article is `Coloured<A> = Product<Colour, A>`.
+- A parser and a printer for polynomials (`src/parse.rs`).
 - The framework and the symbolic atoms are built with the Cargo feature
   `atoms`, which is pure Rust and also builds for WebAssembly. The feature
   `equivariant` adds `DLO` and `Tree`, which use the crate rug (GMP).

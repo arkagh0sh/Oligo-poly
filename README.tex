@@ -377,8 +377,15 @@ The atoms are described by four \code{trait}s.
 \end{enumerate}
 %
 The library implements these traits for \code{DLO} (homogeneous), \code{Tree} (homogeneous),
-\code{FinOrd} (a finite linear order with the trivial group, not homogeneous)
-and \code{Coloured<A>} (the colouring $Y = X + X$ used by the algorithm).
+\code{FinOrd} (a finite linear order with the trivial group, not homogeneous),
+\code{SymbolicAtom<T>} (the atoms of a theory \code{T}, homogeneous by declaration),
+and \code{Product<A1, A2>}.
+The atoms of \code{Product<A1, A2>} are pairs $(a, b)$, ordered lexicographically,
+and the product of the two automorphism groups acts on each coordinate separately.
+Its orbits of pairs of sets are the pairs of orbits of the two projections,
+because for ordered atoms at most one partial automorphism maps a finite set onto another.
+The colouring $Y = X + X$ used by the algorithm is the special case
+\code{Coloured<A> = Product<Colour, A>}, where \code{Colour} has two elements and the trivial group.
 %
 \begin{example}
 In $\dloQ$, two finite sets are in the same orbit if and only if they have the same size,
@@ -586,7 +593,7 @@ which the support condition forbids.
 \paragraph{The colouring.}
 The function \code{equivariant\_groebner\_basis} uses the construction of \cite[Section 5]{GL25}.
 Let $\mathcal{Y}$ be the set of atoms of $\struct$ with a colour, low or high,
-where every low atom is smaller than every high atom (\code{struct Coloured<A>} in \code{coloured.rs}).
+where every low atom is smaller than every high atom (\code{Coloured<A> = Product<Colour, A>} in \code{coloured.rs}).
 An automorphism $\pi$ of $\struct$ acts on $\mathcal{Y}$ by $\pi(c, a) = (c, \pi(a))$.
 For a finite set $V$ of atoms, $\mathsf{col}_V$ maps the atoms in $V$ to low atoms and the others to high atoms,
 and $\mathsf{forget}$ maps a coloured atom to its atom.
