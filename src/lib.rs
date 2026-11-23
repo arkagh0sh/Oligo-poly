@@ -9,6 +9,7 @@ pub mod logic;
 pub mod mon;
 pub mod one_colour;
 pub mod parallel;
+pub mod parse;
 
 // The equivariant framework and the symbolic atoms, built with
 // `cargo build --features atoms`.
