@@ -9,6 +9,10 @@ description = "The web page of atomic_hilbert: equivariant Gröbner bases in the
 # cdylib for the wasm module of the page, rlib for the native tests.
 crate-type = ["cdylib", "rlib"]
 
+[[bin]]
+name = "equivariant-groebner"
+path = "src/main.rs"
+
 [dependencies]
 atomic_hilbert = { path = "..", features = ["atoms"] }
 num-rational = "0.4"

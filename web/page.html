@@ -187,7 +187,7 @@ footer { color: var(--muted); font-size: 0.85rem; }
 <body>
 <header>
   <h1>Equivariant Gröbner bases</h1>
-  <p class="subtitle">Polynomial rings whose variables are indexed by atoms, computed in your browser.</p>
+  <p class="subtitle" id="subtitle">Polynomial rings whose variables are indexed by atoms.</p>
 </header>
 <main>
   <section class="instructions" aria-label="Instructions">
@@ -426,21 +426,32 @@ if (savedTheory === "dense" || savedTheory === "tree") theory.value = savedTheor
 generators.addEventListener("input", remember);
 theory.addEventListener("change", remember);
 
-// The worker, built from the inline source, with the inline module.
-const wasmBytes = Uint8Array.from(atob($("wasm").textContent.trim()), (c) => c.charCodeAt(0));
-const workerUrl = URL.createObjectURL(new Blob([$("worker-source").textContent], { type: "text/javascript" }));
+// The computations run in a Web Worker with the inline WebAssembly module. If
+// the page has no module, it is served by the desktop program, which runs the
+// computations itself.
+const wasmText = $("wasm").textContent.trim();
+const native = wasmText === "";
+$("subtitle").textContent += native ? " Computed on this computer." : " Computed in your browser.";
 let worker = null;
+let workerUrl = null;
+let wasmBytes = null;
 let running = false;
 let started = 0;
 let timer = null;
+// The number of the current request; answers to older ones are ignored.
+let requestNumber = 0;
+
+function ready() {
+  computeButton.disabled = false;
+  statusLine.textContent = "Ready.";
+}
 
 function startWorker() {
   worker = new Worker(workerUrl);
   worker.onmessage = (event) => {
     const message = event.data;
     if (message.type === "ready") {
-      computeButton.disabled = false;
-      statusLine.textContent = "Ready.";
+      ready();
     } else if (message.type === "failed") {
       statusLine.textContent = "This browser cannot run the computation: " + message.message;
     } else if (message.type === "result") {
@@ -471,7 +482,15 @@ function compute() {
   started = performance.now();
   statusLine.textContent = "Computing…";
   timer = setInterval(() => { statusLine.textContent = "Computing… " + seconds(); }, 100);
-  worker.postMessage({ type: "run", request });
+  const number = ++requestNumber;
+  if (native) {
+    fetch("/compute" + location.search, { method: "POST", body: request })
+      .then((answer) => answer.json())
+      .catch((error) => ({ status: "internal-error", message: "the program does not answer (" + error + "); is it still running?" }))
+      .then((response) => { if (number === requestNumber && response.status !== "stopped") finish(response); });
+  } else {
+    worker.postMessage({ type: "run", request });
+  }
 }
 
 function finish(response) {
@@ -485,14 +504,19 @@ function finish(response) {
 
 function stop() {
   if (!running) return;
+  requestNumber++;
   clearInterval(timer);
-  worker.terminate();
   running = false;
   stopButton.disabled = true;
   computeButton.disabled = true;
   statusLine.textContent = "Stopped after " + seconds() + ".";
   result.replaceChildren(element("p", { class: "summary", text: "The computation was stopped." }));
-  startWorker();
+  if (native) {
+    fetch("/stop" + location.search, { method: "POST" }).catch(() => {}).then(ready);
+  } else {
+    worker.terminate();
+    startWorker();
+  }
 }
 
 function orbitList(lines) {
@@ -553,7 +577,13 @@ generators.addEventListener("keydown", (event) => {
   }
 });
 
-startWorker();
+if (native) {
+  ready();
+} else {
+  wasmBytes = Uint8Array.from(atob(wasmText), (c) => c.charCodeAt(0));
+  workerUrl = URL.createObjectURL(new Blob([$("worker-source").textContent], { type: "text/javascript" }));
+  startWorker();
+}
 </script>
 </body>
 </html>

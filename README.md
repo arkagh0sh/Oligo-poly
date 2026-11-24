@@ -119,6 +119,27 @@ A generator is written `description : polynomial`, for example
 page on GitHub Pages at every push to `main`, once Pages uses the source
 "GitHub Actions" in the repository settings.
 
+## The desktop program
+
+`equivariant-groebner` (`web/src/main.rs`) serves the same page on this
+computer and opens it in the default browser. The computations run natively,
+about 1.5 to 2 times faster than in WebAssembly, each in a child process, so
+that the Stop button ends them at once. The server only listens on 127.0.0.1
+and only answers requests that carry the random token of the page address.
+
+```sh
+cargo run --release --manifest-path web/Cargo.toml --bin equivariant-groebner
+# options: --no-browser (only print the address), --port N
+```
+
+The workflow `.github/workflows/desktop.yml` builds the program for Linux
+(static), macOS (Apple silicon and Intel) and Windows at every push to `main`,
+as artifacts of the run; a tag `v*` also publishes them in a release. The
+programs are not signed: on macOS, run
+`xattr -d com.apple.quarantine equivariant-groebner-macos-*` and
+`chmod +x` on the file first; on Windows, choose "More info", then "Run anyway";
+on Linux, run `chmod +x` on the file.
+
 ## Examples
 
 ### Gröbner bases

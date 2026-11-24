@@ -1,10 +1,11 @@
 // Opens dist/index.html from the disk in Chromium, runs every example, and
 // checks the results, the errors and the Stop button.
-// Usage: node test-page.js [screenshot directory]
+// Usage: [PAGE_URL=...] node test-page.js [screenshot directory]
 const path = require("path");
 const { chromium } = require("playwright");
 
-const pageUrl = "file://" + path.resolve(__dirname, "dist/index.html");
+// PAGE_URL tests another copy, for example the desktop program.
+const pageUrl = process.env.PAGE_URL || "file://" + path.resolve(__dirname, "dist/index.html");
 const shots = process.argv[2];
 
 async function finished(page) {
