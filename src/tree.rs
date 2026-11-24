@@ -184,7 +184,7 @@ fn parent(c : &BTreeSet<Tree>, u : &Tree) -> Option<Tree> {
 /// The lexicographic order of the new point with respect to C only depends on
 /// these choices, so the extension property of T_< holds: these are all the
 /// ways to add a point to a finite meet-tree with a lexicographic order.
-pub fn one_point_extensions(x : &BTreeSet<Tree>) -> Vec<Tree> {
+fn one_point_extensions(x : &BTreeSet<Tree>) -> Vec<Tree> {
     let c = closure(x);
     let mut points : Vec<Tree> = c.iter().cloned().collect();
     for u in &c {
