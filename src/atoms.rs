@@ -1,4 +1,5 @@
-use std::any::TypeId;
+use std::any::{Any, TypeId};
+use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap};
 use std::fmt::{Debug, Display, Formatter, Result};
 use std::hash::Hash;
@@ -112,6 +113,86 @@ pub fn homogeneous_tuples_in_same_orbit<S : Structure>(first : &[S], second : &[
     })
 }
 
+/// The diagram of a tuple of length k: a formula in the variables 0, ..., k - 1
+/// that holds at a tuple of length k exactly when the substructures generated
+/// by the two tuples are isomorphic by the map between the tuples. It names every element of the
+/// generated substructure by a term, and lists the equalities between the
+/// variables, the relations between the elements, and the values of the
+/// functions. It only depends on the orbit of the tuple. In a homogeneous
+/// structure, it defines the orbit of the tuple.
+///
+/// If the signature has the order `<`, which must then be a linear order,
+/// only the instances t < u where no element lies between t and u are listed:
+/// the others follow by transitivity, and they also say that the elements are
+/// distinct.
+pub fn diagram<S : Structure>(tuple : &[S]) -> Formula {
+    let signature = &S::theory().signature;
+    let mut elements : Vec<S> = Vec::new();
+    let mut terms : Vec<Term> = Vec::new();
+    let mut conjuncts = Vec::new();
+    for (i, a) in tuple.iter().enumerate() {
+        match elements.iter().position(|b| b == a) {
+            Some(p) => conjuncts.push(Formula::Eq(Term::Var(i), terms[p].clone())),
+            None => {
+                elements.push(a.clone());
+                terms.push(Term::Var(i));
+            }
+        }
+    }
+    // Name the elements of the generated substructure.
+    loop {
+        let mut new = false;
+        for (f, (_, arity)) in signature.functions.iter().enumerate() {
+            for args in index_tuples(elements.len(), *arity) {
+                let value = S::apply(f, &args.iter().map(|&i| elements[i].clone()).collect::<Vec<_>>());
+                if !elements.contains(&value) {
+                    elements.push(value);
+                    terms.push(Term::App(f, args.iter().map(|&i| terms[i].clone()).collect()));
+                    new = true;
+                }
+            }
+        }
+        if !new {
+            break;
+        }
+    }
+    let n = elements.len();
+    let pick = |args : &[usize]| -> Vec<S> { args.iter().map(|&i| elements[i].clone()).collect() };
+    let order = signature.relation("<");
+    if order.is_none() {
+        for q in 0..n {
+            for p in 0..q {
+                conjuncts.push(Formula::negate(Formula::Eq(terms[p].clone(), terms[q].clone())));
+            }
+        }
+    }
+    for (r, (_, arity)) in signature.relations.iter().enumerate() {
+        for args in index_tuples(n, *arity) {
+            let atom = Formula::Rel(r, args.iter().map(|&i| terms[i].clone()).collect());
+            let holds = S::holds(r, &pick(&args));
+            if Some(r) == order {
+                let between = |c : usize| S::holds(r, &pick(&[args[0], c])) && S::holds(r, &pick(&[c, args[1]]));
+                if holds && !(0..n).any(between) {
+                    conjuncts.push(atom);
+                }
+            } else {
+                conjuncts.push(if holds { atom } else { Formula::negate(atom) });
+            }
+        }
+    }
+    for (f, (_, arity)) in signature.functions.iter().enumerate() {
+        for args in index_tuples(n, *arity) {
+            let value = S::apply(f, &pick(&args));
+            let p = elements.iter().position(|b| *b == value).unwrap();
+            let term = Term::App(f, args.iter().map(|&i| terms[i].clone()).collect());
+            if terms[p] != term {
+                conjuncts.push(Formula::Eq(term, terms[p].clone()));
+            }
+        }
+    }
+    Formula::And(conjuncts)
+}
+
 /// The value of a term of the signature of `S` at an assignment of elements to
 /// its variables.
 pub fn evaluate_term<S : Structure>(t : &Term, assignment : &[S]) -> S {
@@ -178,6 +259,57 @@ pub trait AtomsWithOrd : Atoms + Ord {
     /// and the orbit of `second`. The result only depends on these two orbits.
     fn orbits_in_product(first : &BTreeSet<Self>, second : &BTreeSet<Self>)
         -> Vec<SetPairOrbit<Self>>;
+}
+
+/// The answers of `cached_orbits_in_product`, for one type of atoms: the key
+/// is the pair of the sizes and the diagrams of the two sets.
+type ProductCache<A> = HashMap<((usize, Formula), (usize, Formula)), Vec<SetPairOrbit<A>>>;
+
+thread_local! {
+    /// The caches of `cached_orbits_in_product`, one for each type of atoms.
+    static PRODUCT_CACHES : RefCell<HashMap<TypeId, Box<dyn Any>>> = RefCell::new(HashMap::new());
+}
+
+/// `orbits_in_product` with a cache, for homogeneous structures, where it is
+/// worth it: `compute` answers the questions that are not in the cache yet.
+///
+/// The answer only depends on the orbits of `first` and `second`. In a
+/// homogeneous structure, the diagram of a tuple of a given length identifies
+/// its orbit: it only depends on the orbit, and it defines the orbit. So the
+/// sizes and the diagrams of the two sets, listed in increasing order,
+/// identify the question. The sizes are needed: the empty tuple and a single
+/// atom, for example, both have the empty diagram. Each thread has its own
+/// cache, which is kept until the end of the thread.
+pub fn cached_orbits_in_product<A : AtomsWithOrd + HomogeneousStructure>(
+    first : &BTreeSet<A>,
+    second : &BTreeSet<A>,
+    compute : impl FnOnce(&BTreeSet<A>, &BTreeSet<A>) -> Vec<SetPairOrbit<A>>,
+) -> Vec<SetPairOrbit<A>> {
+    let sorted = |set : &BTreeSet<A>| set.iter().cloned().collect::<Vec<A>>();
+    let key = ((first.len(), diagram(&sorted(first))), (second.len(), diagram(&sorted(second))));
+    let known = PRODUCT_CACHES.with(|caches| {
+        caches
+            .borrow()
+            .get(&TypeId::of::<A>())
+            .and_then(|cache| cache.downcast_ref::<ProductCache<A>>())
+            .and_then(|cache| cache.get(&key).cloned())
+    });
+    if let Some(orbits) = known {
+        return orbits;
+    }
+    // The cache is not borrowed during the computation, which may use the
+    // caches of other types.
+    let orbits = compute(first, second);
+    PRODUCT_CACHES.with(|caches| {
+        caches
+            .borrow_mut()
+            .entry(TypeId::of::<A>())
+            .or_insert_with(|| Box::new(ProductCache::<A>::new()))
+            .downcast_mut::<ProductCache<A>>()
+            .expect("each type of atoms has a cache of its own type")
+            .insert(key, orbits.clone());
+    });
+    orbits
 }
 
 /// The orbit of an element with atoms, given by a representative.

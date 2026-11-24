@@ -16,7 +16,8 @@ use crate::equivariant::PolynomialOrbit;
 use crate::logic::{parse_description_implicit, show_formula, Description, Formula, ParseError, Signature};
 use crate::mon::Polynomial;
 use crate::parse::{parse_polynomial_in, polynomial_names, show_polynomial, Coefficient};
-use crate::symbolic::{diagram, orbit_of, simplify, DescriptionError, SymbolicAtom, SymbolicOrbit, SymbolicTheory};
+use crate::atoms::diagram;
+use crate::symbolic::{orbit_of, simplify, DescriptionError, SymbolicAtom, SymbolicOrbit, SymbolicTheory};
 
 /// Why a line is not a generator.
 #[derive(Clone, Debug, PartialEq, Eq)]
