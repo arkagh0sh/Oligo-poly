@@ -403,6 +403,16 @@ pub fn parse_axiom(src : &str, signature : &Signature) -> Result<Axiom, ParseErr
     Ok(Axiom { variables, formula })
 }
 
+/// Parses a description whose atoms are its variables, in the order of their
+/// first occurrence. A variable must start with a letter or `_`.
+pub fn parse_description_implicit(src : &str, signature : &Signature) -> Result<Description, ParseError> {
+    let (variables, formula) = parse(src, signature, &[])?;
+    if let Some(name) = variables.iter().find(|v| !v.starts_with(|c : char| c.is_alphabetic() || c == '_')) {
+        return Err(ParseError(format!("{name} is not a variable: a variable starts with a letter or _")));
+    }
+    Ok(Description { variables, formula })
+}
+
 /// Parses a description over `signature` whose variables are the given
 /// `atoms`, numbered in this order. A variable that is not one of the `atoms`
 /// is an error, so that a misspelt atom is not taken for a new one.
@@ -439,6 +449,8 @@ pub fn show_formula(f : &Formula, signature : &Signature, names : &[String]) -> 
             Formula::Eq(x, y) => format!("{} != {}", t(x), t(y)),
             _ => format!("!{}", show_formula(a, signature, names)),
         },
+        Formula::And(v) if v.is_empty() => "true".to_string(),
+        Formula::Or(v) if v.is_empty() => "false".to_string(),
         Formula::And(v) => format!("({})", v.iter().map(|a| show_formula(a, signature, names)).collect::<Vec<_>>().join(" & ")),
         Formula::Or(v) => format!("({})", v.iter().map(|a| show_formula(a, signature, names)).collect::<Vec<_>>().join(" | ")),
     }

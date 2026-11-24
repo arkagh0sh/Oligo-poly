@@ -260,6 +260,13 @@ impl<A : AtomsWithOrd, B : ElementsWithAtoms<A>> PartialEq for Orbit<A, B> {
 
 impl<A : AtomsWithOrd, B : ElementsWithAtoms<A>> Eq for Orbit<A, B> {}
 
+/// Shows the orbit through its representative, for debugging only.
+impl<A : AtomsWithOrd, B : ElementsWithAtoms<A> + Debug> Debug for Orbit<A, B> {
+    fn fmt(&self, f : &mut Formatter<'_>) -> Result {
+        write!(f, "orbit of {:?}", self.rep)
+    }
+}
+
 /// Displays the orbit through its representative, for output only.
 impl<A : AtomsWithOrd, B : ElementsWithAtoms<A> + Display> Display for Orbit<A, B> {
     fn fmt(&self, f : &mut Formatter<'_>) -> Result {

@@ -252,6 +252,19 @@ pub fn parse_polynomial<F : Coefficient, X : Clone + Ord + Hash>(
     Ok(p)
 }
 
+/// The names of a polynomial, in the order of their first occurrence.
+pub fn polynomial_names(src : &str) -> Result<Vec<String>, ParseError> {
+    let mut names : Vec<String> = Vec::new();
+    for (token, _) in tokenize(src)? {
+        if let Token::Ident(name) = token
+            && !names.contains(&name)
+        {
+            names.push(name);
+        }
+    }
+    Ok(names)
+}
+
 /// Parses a polynomial in the variables `variables`, numbered from 0.
 pub fn parse_polynomial_in<F : Coefficient>(src : &str, variables : &[String]) -> Result<Polynomial<F, usize>, ParseError> {
     parse_polynomial(src, |name| variables.iter().position(|v| v == name))

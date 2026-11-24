@@ -22,6 +22,8 @@ pub mod elements_with_atoms;
 #[cfg(feature = "atoms")]
 pub mod equivariant;
 #[cfg(feature = "atoms")]
+pub mod generator;
+#[cfg(feature = "atoms")]
 pub mod product;
 #[cfg(feature = "atoms")]
 pub mod symbolic;
