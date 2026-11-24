@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Equivariant Gröbner Bases</title>
+<meta name="description" content="Equivariant Gröbner bases for polynomial rings whose variables are indexed by atoms, computed in the browser.">
+<style>
+:root {
+  --bg: #fbfaf7;
+  --surface: #ffffff;
+  --text: #1d1d1b;
+  --muted: #5d5c57;
+  --border: #dcd9d0;
+  --accent: #2f5d8a;
+  --accent-text: #ffffff;
+  --code-bg: #f1efe8;
+  --error: #a3341f;
+  --error-bg: #fbeeea;
+  --ok: #2d6a3e;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161615;
+    --surface: #1f1f1d;
+    --text: #e9e7e1;
+    --muted: #a4a29a;
+    --border: #3a3935;
+    --accent: #7fb0e0;
+    --accent-text: #10161c;
+    --code-bg: #2a2a27;
+    --error: #f0907a;
+    --error-bg: #3a221c;
+    --ok: #86c79a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161615;
+  --surface: #1f1f1d;
+  --text: #e9e7e1;
+  --muted: #a4a29a;
+  --border: #3a3935;
+  --accent: #7fb0e0;
+  --accent-text: #10161c;
+  --code-bg: #2a2a27;
+  --error: #f0907a;
+  --error-bg: #3a221c;
+  --ok: #86c79a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.55 var(--sans);
+}
+header, main { max-width: 1240px; margin: 0 auto; padding: 0 16px; }
+header { padding-top: 28px; padding-bottom: 12px; }
+h1 { font-size: 1.6rem; line-height: 1.25; margin: 0 0 4px; font-weight: 650; }
+.subtitle { color: var(--muted); margin: 0; }
+main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 32px;
+  padding-bottom: 48px;
+  align-items: start;
+}
+@media (max-width: 860px) {
+  main { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .workspace { order: -1; }
+}
+h2 { font-size: 1.05rem; margin: 24px 0 6px; font-weight: 650; }
+h2:first-child { margin-top: 0; }
+p, ul, ol { margin: 0 0 10px; }
+ul, ol { padding-left: 1.25em; }
+li { margin: 2px 0; }
+code, kbd {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  background: var(--code-bg);
+  padding: 0.05em 0.3em;
+  border-radius: 4px;
+  overflow-wrap: anywhere;
+}
+a { color: var(--accent); }
+.instructions { min-width: 0; }
+.symbols { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 12px; margin: 0 0 10px; }
+.symbols dt { font-family: var(--mono); font-size: 0.9em; }
+.symbols dd { margin: 0; }
+.examples { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.example {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.example:hover { border-color: var(--accent); }
+.example:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.example strong { display: block; font-weight: 600; }
+.example .hint { display: block; }
+@media (max-width: 520px) {
+  .symbols { grid-template-columns: minmax(0, 1fr); }
+  .symbols dd { margin: 0 0 6px 1em; }
+}
+.example code { background: none; padding: 0; white-space: pre-wrap; color: var(--muted); }
+.workspace {
+  position: sticky;
+  top: 16px;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+}
+@media (max-width: 860px) { .workspace { position: static; } }
+.controls { display: flex; flex-wrap: wrap; gap: 12px 20px; margin-bottom: 14px; align-items: end; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field > span, fieldset legend { font-size: 0.85rem; color: var(--muted); font-weight: 600; }
+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+fieldset label { margin-right: 14px; white-space: nowrap; }
+select, input[type="number"], textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  max-width: 100%;
+}
+input[type="number"] { width: 7.5em; }
+textarea {
+  width: 100%;
+  min-height: 9.5em;
+  resize: vertical;
+  font-family: var(--mono);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+.buttons { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 12px 0 4px; }
+button.primary, button.secondary {
+  font: inherit;
+  font-weight: 600;
+  border-radius: 6px;
+  padding: 7px 16px;
+  cursor: pointer;
+  border: 1px solid var(--accent);
+}
+button.primary { background: var(--accent); color: var(--accent-text); }
+button.secondary { background: transparent; color: var(--accent); }
+button:disabled { opacity: 0.45; cursor: default; }
+.status { color: var(--muted); font-size: 0.92rem; }
+.hint { color: var(--muted); font-size: 0.85rem; margin: 4px 0 0; }
+.result { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 14px; min-height: 3em; }
+.result h3 { font-size: 1rem; margin: 0 0 8px; font-weight: 650; }
+.result .summary { color: var(--muted); font-size: 0.92rem; }
+.orbits { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 4px; }
+.orbits li {
+  font-family: var(--mono);
+  font-size: 0.92rem;
+  background: var(--code-bg);
+  border-radius: 6px;
+  padding: 5px 10px;
+  overflow-wrap: anywhere;
+}
+.errors { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.errors li { background: var(--error-bg); color: var(--error); border-radius: 6px; padding: 6px 10px; overflow-wrap: anywhere; }
+.errors .line { font-weight: 650; }
+.errors code { background: transparent; color: inherit; }
+.notice { color: var(--error); }
+.copy { font-size: 0.85rem; padding: 3px 10px; }
+footer { color: var(--muted); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Equivariant Gröbner bases</h1>
+  <p class="subtitle">Polynomial rings whose variables are indexed by atoms, computed in your browser.</p>
+</header>
+<main>
+  <section class="instructions" aria-label="Instructions">
+    <h2>What the page computes</h2>
+    <p>
+      The variables x<sub>a</sub> are indexed by the atoms a of a structure:
+      the dense linear order (Q, &lt;), or the dense meet-tree.
+      An automorphism of the structure renames the variables.
+      You give finitely many orbits of polynomials, and the page computes an
+      <em>equivariant Gröbner basis</em> of the ideal that they generate:
+      finitely many orbits B such that a polynomial f is in the ideal if and only if
+      f reduces to zero by elements h of B with supp(h) ⊆ supp(f).
+    </p>
+    <p>
+      By default, the algorithm is the colouring of Section 5 of
+      A. Ghosh and A. Lopez, <cite>Computability of equivariant Gröbner bases</cite> (2025).
+      The one-colour variant colours at most one variable of each polynomial; it is often faster.
+    </p>
+
+    <h2>Writing a generator</h2>
+    <p>Write one generator per line, as <code>description : polynomial</code>. For example,</p>
+    <p><code>x &lt; y &amp; y &lt; z : x*y - z</code></p>
+    <p>
+      is the orbit of x<sub>a</sub>x<sub>b</sub> − x<sub>c</sub> for all atoms a &lt; b &lt; c.
+      The atoms are the variables of the line. The description must fix the
+      relative position of the atoms completely, so that it defines one orbit.
+      A line without <code>:</code> is a polynomial with the description <code>true</code>,
+      as in <code>x^2 - 1</code>. The sign <code>#</code> starts a comment.
+    </p>
+
+    <h2>Descriptions</h2>
+    <dl class="symbols">
+      <dt>s = t, s != t</dt><dd>equal, different</dd>
+      <dt>s &lt; t, s &gt; t, s &lt;= t, s &gt;= t</dt><dd>the order of the atoms</dd>
+      <dt>!A, A &amp; B, A | B</dt><dd>not, and, or</dd>
+      <dt>A -&gt; B, A &lt;-&gt; B</dt><dd>implies, if and only if</dd>
+      <dt>true, false, ( )</dt><dd>constants and parentheses</dd>
+    </dl>
+    <p>For the dense meet-tree, <code>&lt;</code> is the lexicographic order, and there are two more symbols:</p>
+    <dl class="symbols">
+      <dt>le(x, y)</dt><dd>x is below y in the tree, or equal to y</dd>
+      <dt>meet(x, y)</dt><dd>the largest point below both x and y</dd>
+    </dl>
+
+    <h2>Polynomials</h2>
+    <p>
+      Use <code>+ - * / ^</code> and parentheses. A product can also be written
+      <code>2x</code>, <code>x y</code> or <code>2(x + 1)</code>.
+      Coefficients are exact rationals, such as <code>3/2</code> or <code>0.25</code>;
+      only constants can divide. A name may have several letters, so <code>xy</code> is one variable.
+    </p>
+
+    <h2>Reading the result</h2>
+    <p>
+      Each line of the result is one orbit of the basis, written in the same syntax, with
+      atoms <code>x1 &lt; x2 &lt; …</code>. The basis is minimal and its tails are reduced.
+      Monomials are ordered lexicographically, with the largest atom as the most significant variable.
+    </p>
+    <p>
+      If a description allows no atoms, or several orbits, the page says so; for several orbits,
+      it shows two possible completions. The orbit limit stops computations that grow too large.
+    </p>
+
+    <h2>Examples</h2>
+    <ul class="examples" id="examples"></ul>
+  </section>
+
+  <section class="workspace" aria-label="Computation">
+    <form id="form" autocomplete="off">
+      <div class="controls">
+        <label class="field">
+          <span>Atoms</span>
+          <select id="theory">
+            <option value="dense">Dense linear order (Q, &lt;)</option>
+            <option value="tree">Dense meet-tree</option>
+          </select>
+        </label>
+        <fieldset>
+          <legend>Algorithm</legend>
+          <label><input type="radio" name="algorithm" value="colouring" checked> Colouring</label>
+          <label><input type="radio" name="algorithm" value="one-colour"> One colour</label>
+        </fieldset>
+        <label class="field">
+          <span>Orbit limit</span>
+          <input type="number" id="limit" value="200" min="1" max="100000" step="1">
+        </label>
+      </div>
+      <label class="field" for="generators"><span>Generators, one per line</span></label>
+      <textarea id="generators" spellcheck="false" aria-describedby="shortcut">x &lt; y &amp; y &lt; z : x*y - z</textarea>
+      <p class="hint" id="shortcut">Press <kbd>Ctrl</kbd> + <kbd>Enter</kbd> to compute.</p>
+      <div class="buttons">
+        <button type="submit" class="primary" id="compute" disabled>Compute</button>
+        <button type="button" class="secondary" id="stop" disabled>Stop</button>
+        <span class="status" id="status" role="status">Loading…</span>
+      </div>
+    </form>
+    <div class="result" id="result" aria-live="polite"></div>
+  </section>
+</main>
+
+<script id="wasm" type="application/octet-stream">__WASM_BASE64__</script>
+
+<script id="worker-source" type="text/plain">
+// The worker compiles the module once, and instantiates it afresh for every
+// request, so that each computation starts from a clean memory.
+let module = null;
+
+function read(exports, length) {
+  return new TextDecoder().decode(new Uint8Array(exports.memory.buffer, exports.output_ptr(), length));
+}
+
+onmessage = async (event) => {
+  const message = event.data;
+  if (message.type === "init") {
+    try {
+      module = await WebAssembly.compile(message.bytes);
+      postMessage({ type: "ready" });
+    } catch (error) {
+      postMessage({ type: "failed", message: String(error) });
+    }
+    return;
+  }
+  if (message.type === "run") {
+    const instance = await WebAssembly.instantiate(module, {});
+    const exports = instance.exports;
+    const input = new TextEncoder().encode(message.request);
+    const pointer = exports.alloc(input.length);
+    new Uint8Array(exports.memory.buffer, pointer, input.length).set(input);
+    let text;
+    try {
+      text = read(exports, exports.compute(pointer, input.length));
+    } catch (error) {
+      // A panic writes its message before the module traps.
+      const length = exports.output_len();
+      text = length > 0 ? read(exports, length) : JSON.stringify({ status: "internal-error", message: String(error) });
+    }
+    postMessage({ type: "result", response: JSON.parse(text) });
+  }
+};
+</script>
+
+<script>
+"use strict";
+
+const EXAMPLES = [
+  {
+    title: "Products in (Q, <)",
+    theory: "dense",
+    generators: "x < y & y < z : x*y - z",
+    note: "The ideal is generated by x2 - x1 and x1^2 - x1.",
+  },
+  {
+    title: "Squares in (Q, <)",
+    theory: "dense",
+    generators: "x < y : x^2 - y",
+  },
+  {
+    title: "Two points in (Q, <)",
+    theory: "dense",
+    generators: "x < y : y - x\nx^2 - 1",
+  },
+  {
+    title: "Differences along the tree order",
+    theory: "tree",
+    generators: "le(x, y) & x != y : y - x",
+    note: "The basis adds the differences of incomparable points.",
+  },
+  {
+    title: "Squares along the tree order",
+    theory: "tree",
+    generators: "le(x, y) & x != y : y - x^2",
+  },
+  {
+    title: "An incomplete description",
+    theory: "dense",
+    generators: "x < y : x*y - z",
+    note: "The position of z is not fixed, so the page reports an error.",
+  },
+];
+
+const $ = (id) => document.getElementById(id);
+const form = $("form");
+const theory = $("theory");
+const limit = $("limit");
+const generators = $("generators");
+const computeButton = $("compute");
+const stopButton = $("stop");
+const statusLine = $("status");
+const result = $("result");
+
+function storageGet(key) {
+  try { return window.localStorage.getItem(key); } catch (error) { return null; }
+}
+function storageSet(key, value) {
+  try { window.localStorage.setItem(key, value); } catch (error) { /* storage is optional */ }
+}
+
+function algorithm() {
+  return form.querySelector('input[name="algorithm"]:checked').value;
+}
+
+function element(tag, attributes, children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(attributes || {})) {
+    if (key === "text") node.textContent = value; else node.setAttribute(key, value);
+  }
+  for (const child of children || []) node.append(child);
+  return node;
+}
+
+// The examples.
+for (const example of EXAMPLES) {
+  const button = element("button", { type: "button", class: "example" }, [
+    element("strong", { text: example.title }),
+    element("code", { text: example.generators }),
+  ]);
+  if (example.note) button.append(element("span", { class: "hint", text: example.note }));
+  button.addEventListener("click", () => {
+    theory.value = example.theory;
+    generators.value = example.generators;
+    remember();
+    compute();
+  });
+  $("examples").append(element("li", {}, [button]));
+}
+
+// The last input is kept in the browser, when storage is available.
+function remember() {
+  storageSet("generators", generators.value);
+  storageSet("theory", theory.value);
+}
+const savedGenerators = storageGet("generators");
+const savedTheory = storageGet("theory");
+if (savedGenerators !== null) generators.value = savedGenerators;
+if (savedTheory === "dense" || savedTheory === "tree") theory.value = savedTheory;
+generators.addEventListener("input", remember);
+theory.addEventListener("change", remember);
+
+// The worker, built from the inline source, with the inline module.
+const wasmBytes = Uint8Array.from(atob($("wasm").textContent.trim()), (c) => c.charCodeAt(0));
+const workerUrl = URL.createObjectURL(new Blob([$("worker-source").textContent], { type: "text/javascript" }));
+let worker = null;
+let running = false;
+let started = 0;
+let timer = null;
+
+function startWorker() {
+  worker = new Worker(workerUrl);
+  worker.onmessage = (event) => {
+    const message = event.data;
+    if (message.type === "ready") {
+      computeButton.disabled = false;
+      statusLine.textContent = "Ready.";
+    } else if (message.type === "failed") {
+      statusLine.textContent = "This browser cannot run the computation: " + message.message;
+    } else if (message.type === "result") {
+      finish(message.response);
+    }
+  };
+  worker.onerror = (event) => {
+    if (running) finish({ status: "internal-error", message: event.message || "the worker stopped" });
+  };
+  worker.postMessage({ type: "init", bytes: wasmBytes });
+}
+
+function seconds() {
+  return ((performance.now() - started) / 1000).toFixed(1) + " s";
+}
+
+function compute() {
+  if (running || computeButton.disabled) return;
+  const request = JSON.stringify({
+    theory: theory.value,
+    algorithm: algorithm(),
+    generators: generators.value,
+    max_orbits: Math.max(1, Math.floor(Number(limit.value) || 200)),
+  });
+  running = true;
+  computeButton.disabled = true;
+  stopButton.disabled = false;
+  started = performance.now();
+  statusLine.textContent = "Computing…";
+  timer = setInterval(() => { statusLine.textContent = "Computing… " + seconds(); }, 100);
+  worker.postMessage({ type: "run", request });
+}
+
+function finish(response) {
+  clearInterval(timer);
+  running = false;
+  stopButton.disabled = true;
+  computeButton.disabled = false;
+  statusLine.textContent = "Finished in " + seconds() + ".";
+  show(response);
+}
+
+function stop() {
+  if (!running) return;
+  clearInterval(timer);
+  worker.terminate();
+  running = false;
+  stopButton.disabled = true;
+  computeButton.disabled = true;
+  statusLine.textContent = "Stopped after " + seconds() + ".";
+  result.replaceChildren(element("p", { class: "summary", text: "The computation was stopped." }));
+  startWorker();
+}
+
+function orbitList(lines) {
+  return element("ol", { class: "orbits" }, lines.map((line) => element("li", { text: line })));
+}
+
+function copyButton(lines) {
+  const button = element("button", { type: "button", class: "secondary copy", text: "Copy" });
+  button.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      button.textContent = "Copied";
+    } catch (error) {
+      button.textContent = "Copy failed";
+    }
+    setTimeout(() => { button.textContent = "Copy"; }, 1500);
+  });
+  return button;
+}
+
+function show(response) {
+  const nodes = [];
+  switch (response.status) {
+    case "basis": {
+      const n = response.basis.length;
+      nodes.push(element("h3", { text: "Equivariant Gröbner basis: " + n + (n === 1 ? " orbit" : " orbits") }));
+      nodes.push(orbitList(response.basis));
+      nodes.push(element("p", { class: "summary", text: "The computation found " + response.orbits + " orbits before the basis was made minimal." }));
+      nodes.push(copyButton(response.basis));
+      break;
+    }
+    case "invalid-generators":
+      nodes.push(element("h3", { text: "Some lines are not generators" }));
+      nodes.push(element("ul", { class: "errors" }, response.errors.map((e) =>
+        element("li", {}, [element("span", { class: "line", text: "Line " + e.line + ": " }), e.message]))));
+      break;
+    case "no-generators":
+      nodes.push(element("p", { class: "notice", text: "Write at least one generator." }));
+      break;
+    case "limit":
+      nodes.push(element("h3", { text: "The orbit limit was reached" }));
+      nodes.push(element("p", { class: "summary", text: "Increase the orbit limit to continue. The orbits found so far:" }));
+      nodes.push(orbitList(response.partial));
+      break;
+    default:
+      nodes.push(element("h3", { text: "Internal error" }));
+      nodes.push(element("p", { class: "notice", text: response.message || "unknown error" }));
+  }
+  result.replaceChildren(...nodes);
+}
+
+form.addEventListener("submit", (event) => { event.preventDefault(); compute(); });
+stopButton.addEventListener("click", stop);
+generators.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+    event.preventDefault();
+    compute();
+  }
+});
+
+startWorker();
+</script>
+</body>
+</html>

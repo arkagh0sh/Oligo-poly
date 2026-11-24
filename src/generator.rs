@@ -106,7 +106,7 @@ pub fn show_generator<T : SymbolicTheory, F : Coefficient>(orbit : &PolynomialOr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::equivariant::{equivariant_groebner_basis, minimal_basis};
+    use crate::equivariant::{equivariant_groebner_basis, minimal_basis, reduce_tails};
     use crate::symbolic::{DenseOrder, MeetTree};
     use num_rational::BigRational;
 
@@ -174,6 +174,15 @@ mod tests {
         };
         let basis = equivariant_groebner_basis(vec![dense("x < y & y < z : x*y - z").unwrap()], 50).ok().unwrap();
         let mut shown = show(&basis);
+        shown.sort();
+        assert_eq!(shown, ["true : x1^2 - x1", "x1 < x2 : x2 - x1"]);
+        // For the squares, the generator x2 - x1^2 stays in the minimal basis;
+        // its tail reduces to x1 by x1^2 - x1.
+        let basis = minimal_basis(equivariant_groebner_basis(vec![dense("x < y : x^2 - y").unwrap()], 50).ok().unwrap());
+        let mut shown : Vec<String> = basis.iter().map(show_generator).collect();
+        shown.sort();
+        assert_eq!(shown, ["true : x1^2 - x1", "x1 < x2 : x2 - x1^2"]);
+        let mut shown : Vec<String> = reduce_tails(basis).iter().map(show_generator).collect();
         shown.sort();
         assert_eq!(shown, ["true : x1^2 - x1", "x1 < x2 : x2 - x1"]);
         let basis = equivariant_groebner_basis(vec![tree("le(x, y) & x != y : y - x").unwrap()], 50).ok().unwrap();

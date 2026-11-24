@@ -99,6 +99,26 @@ become denser as n grows.
 cargo run --release --features equivariant --example elimination_scaling -- --vars 5,6,7 --count 10 --timeout 60
 ```
 
+## The web page
+
+`web/` builds a single HTML file that computes equivariant Gröbner bases in the
+browser, over the symbolic atoms of the dense linear order or of the dense
+meet-tree. The WebAssembly module and the Web Worker are inside the file, so it
+also opens directly from the disk, without a server.
+
+```sh
+rustup target add wasm32-unknown-unknown
+web/build.sh                          # writes web/dist/index.html
+cargo test --manifest-path web/Cargo.toml
+node web/test-page.js                 # opens the page in Chromium (Playwright)
+```
+
+A generator is written `description : polynomial`, for example
+`x < y & y < z : x*y - z`; its atoms are the variables of the line
+(`src/generator.rs`). The workflow `.github/workflows/pages.yml` publishes the
+page on GitHub Pages at every push to `main`, once Pages uses the source
+"GitHub Actions" in the repository settings.
+
 ## Examples
 
 ### Gröbner bases

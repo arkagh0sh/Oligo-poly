@@ -365,6 +365,24 @@ pub fn minimal_basis<F : Field, A : AtomsWithOrd>(basis : OrbitList<F, A>) -> Or
     kept
 }
 
+/// Reduces the tail of each orbit of a minimal basis by the other orbits: the
+/// representative p becomes the monic equivariant normal form of p with
+/// respect to the other orbits. In a minimal basis, the leading term of p is
+/// not reducible by them, so it is kept. Moreover, no other element of the
+/// orbit of p has its support in supp(p), since an automorphism that maps
+/// supp(p) into itself fixes it. The new representative is in the ideal, it
+/// has the same leading monomial, and its support is contained in supp(p). So
+/// if `basis` is an equivariant Gröbner basis, the result is one as well.
+pub fn reduce_tails<F : Field, A : AtomsWithOrd>(basis : OrbitList<F, A>) -> OrbitList<F, A> {
+    let mut result = basis;
+    for i in 0..result.len() {
+        let others : Vec<PolynomialOrbit<F, A>> =
+            result.iter().enumerate().filter(|(j, _)| *j != i).map(|(_, o)| o.clone()).collect();
+        result[i] = result[i].map(|p| equivariant_normal_form(p.clone(), &others).monic());
+    }
+    result
+}
+
 /// Whether `f` reduces to zero by the `orbits` with the support condition.
 /// When the orbits form an equivariant Gröbner basis of an ideal, this decides
 /// membership of `f` in the ideal.
