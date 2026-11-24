@@ -18,6 +18,8 @@ pub mod atoms;
 #[cfg(feature = "atoms")]
 pub mod coloured;
 #[cfg(feature = "atoms")]
+pub mod dlo;
+#[cfg(feature = "atoms")]
 pub mod elements_with_atoms;
 #[cfg(feature = "atoms")]
 pub mod equivariant;
@@ -30,9 +32,7 @@ pub mod symbolic;
 #[cfg(feature = "atoms")]
 pub mod trivial;
 
-// The concrete atoms, which use rug (GMP), built with
+// The atoms of the dense meet-tree, which use rug (GMP), built with
 // `cargo build --features equivariant`.
-#[cfg(feature = "equivariant")]
-pub mod dlo;
 #[cfg(feature = "equivariant")]
 pub mod tree;

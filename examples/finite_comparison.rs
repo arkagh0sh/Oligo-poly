@@ -58,7 +58,6 @@ use atomic_hilbert::mon::Polynomial;
 use atomic_hilbert::tree::Tree;
 use num_rational::BigRational;
 use num_traits::{Pow, Zero};
-use rug::Rational;
 use std::collections::BTreeSet;
 use std::fmt::Display;
 use std::fs::File;
@@ -200,7 +199,7 @@ fn c<A : AtomsWithOrd>(k : i64) -> Polynomial<Q, A> {
 
 /// The variable of the atom i of (Q, <).
 fn x(i : i64) -> Polynomial<Q, DLO> {
-    Polynomial::var(DLO::new(Rational::from(i)))
+    Polynomial::var(DLO::from_int(i))
 }
 
 /// The variable of the point of the dense meet-tree given by a sequence.
@@ -212,7 +211,7 @@ fn main() {
     let mut options = Options::parse();
 
     // Atoms of (Q, <): S = {1, ..., n}.
-    let dlo : Vec<DLO> = (1..=20).map(|i| DLO::new(Rational::from(i))).collect();
+    let dlo : Vec<DLO> = (1..=20).map(DLO::from_int).collect();
     run(&mut options, "dlo-j0", "<x_a - 1>", vec![x(1) - c(1)], &dlo);
     run(&mut options, "dlo-diagonal", "<x_a - x_b : a < b>", vec![x(1) - x(2)], &dlo);
     run(&mut options, "dlo-two-points", "<x_b - x_a : a < b> + <x_a^2 - 1>", vec![x(2) - x(1), x(1).pow(2u8) - c(1)], &dlo);

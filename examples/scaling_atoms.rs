@@ -15,7 +15,7 @@ use num_rational::BigRational as Q;
 use num_traits::One;
 
 fn dense_chain(n : usize) -> Vec<DLO> {
-    (0..n as i64).map(|i| DLO::new(rug::Rational::from(i))).collect()
+    (0..n as i64).map(DLO::from_int).collect()
 }
 
 fn tree_chain(n : usize) -> Vec<Tree> {

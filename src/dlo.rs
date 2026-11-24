@@ -1,4 +1,4 @@
-use rug::Rational;
+use num_rational::Rational64;
 use std::collections::BTreeSet;
 use std::fmt::{Debug, Display, Formatter, Result};
 use itertools::Itertools;
@@ -11,14 +11,31 @@ use super::atoms::*;
 /// Atoms of the dense linear order without endpoints (Q, <).
 /// The value is private, so programs can only compare atoms with the order and
 /// equality.
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+///
+/// The value is a pair of 64-bit integers (`Ratio<i64>`), instead of a big
+/// rational (`rug::Rational`, from GMP). Big rationals make the code
+/// significantly slower, by a factor of about 1.8 on equivariant Gröbner bases,
+/// due to the calls made each time an atom is copied, dropped or compared: the
+/// memory allocation calls `malloc` and `free`, and the GMP calls
+/// `__gmpz_init_set` (copy), `__gmpq_clear` (drop) and `__gmpq_cmp`
+/// (comparison). The algorithms copy and compare atoms constantly, in supports,
+/// monomials and partial automorphisms. A pair of integers is copied and
+/// compared without such calls. The values stay small: the atoms created
+/// during a computation come from `orbits_in_product`, which uses the integers
+/// 1, ..., k, and partial automorphisms only map atoms to existing atoms.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DLO {
-    val : Rational
+    val : Rational64
 }
 
 impl DLO {
-    pub fn new(q : Rational) -> DLO {
+    pub fn new(q : Rational64) -> DLO {
         DLO {val : q}
+    }
+
+    /// The atom given by an integer.
+    pub fn from_int(i : i64) -> DLO {
+        DLO::new(Rational64::from_integer(i))
     }
 }
 
@@ -71,7 +88,7 @@ impl AtomsWithOrd for DLO {
     fn orbits_in_product(first : &BTreeSet<Self>, second : &BTreeSet<Self>)
         -> Vec<SetPairOrbit<Self>> {
         let (n, m) = (first.len(), second.len());
-        let atom = |i : usize| DLO::new(Rational::from(i as u64));
+        let atom = |i : usize| DLO::from_int(i as i64);
         let mut reps = Vec::new();
         for k in n.max(m)..=(n + m) {
             for s in (1..=k).combinations(n) {
@@ -90,7 +107,7 @@ impl AtomsWithOrd for DLO {
 /// An atom is an element with atoms, with support {a}.
 impl ElementsWithAtoms<DLO> for DLO {
     fn support(&self) -> BTreeSet<DLO> {
-        BTreeSet::from([self.clone()])
+        BTreeSet::from([*self])
     }
 
     fn apply_paut(&self, paut : &PartialAut<DLO>) -> Self {
@@ -103,7 +120,7 @@ mod tests {
     use super::*;
 
     fn d(i : i64) -> DLO {
-        DLO::new(Rational::from(i))
+        DLO::from_int(i)
     }
 
     fn set(xs : &[i64]) -> BTreeSet<DLO> {
@@ -215,7 +232,7 @@ mod tests {
         assert!(product.contains(&Orbit::new((d(5), d(6)))));
         assert!(product.contains(&Orbit::new((d(6), d(5)))));
         // map and filter with equivariant functions.
-        assert!(product.iter().all(|o| o.map(|(a, _)| a.clone()) == atoms));
+        assert!(product.iter().all(|o| o.map(|(a, _)| *a) == atoms));
         let diagonal : Vec<_> = product.iter().filter_map(|o| o.filter(|(a, b)| a == b)).collect();
         assert_eq!(diagonal.len(), 1);
     }

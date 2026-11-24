@@ -29,7 +29,9 @@ A. Ghosh and A. Lopez, *Computability of equivariant Gröbner bases* (2025).
 - A parser and a printer for polynomials (`src/parse.rs`).
 - The framework and the symbolic atoms are built with the Cargo feature
   `atoms`, which is pure Rust and also builds for WebAssembly. The feature
-  `equivariant` adds `DLO` and `Tree`, which use the crate rug (GMP).
+  `equivariant` adds `Tree`, which uses the crate rug (GMP). `DLO` uses pairs
+  of 64-bit integers instead of GMP rationals, which made the code about 1.8
+  times slower, so it belongs to the feature `atoms`.
 - The equivariant Buchberger algorithm, in which a polynomial f is only
   reduced by elements h with supp(h) ⊆ supp(f) (`src/equivariant.rs`, example
   `equivariant_demo`). `equivariant_buchberger` computes a weak equivariant
@@ -170,12 +172,11 @@ use atomic_hilbert::dlo::DLO;
 use atomic_hilbert::equivariant::{equivariant_buchberger, equivariant_groebner_basis, minimal_basis, reduces_to_zero};
 use atomic_hilbert::mon::Polynomial;
 use num_rational::BigRational;
-use rug::Rational;
 
 type P = Polynomial<BigRational, DLO>;
 
 fn x(i : i64) -> P {
-    Polynomial::var(DLO::new(Rational::from(i)))
+    Polynomial::var(DLO::from_int(i))
 }
 
 fn main() {

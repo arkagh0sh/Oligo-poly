@@ -403,19 +403,24 @@ Our recommended way of defining a relational structure is to use a wrapper class
 For illustration we define \code{DLO} as
 \color{magenta}
 \begin{verbatim}
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DLO {
-    val : Rational
+    val : Rational64
 }
 \end{verbatim}
 \color{black}
+%
+The value is a pair of 64-bit integers (\code{Rational64}) rather than a big rational of GMP:
+big rationals make the code significantly slower,
+because every copy, drop and comparison of an atom calls \code{malloc}, \code{free} and GMP,
+and the algorithms copy and compare atoms constantly.
 %
 Observe that the field \code{val} is private.
 Therefore one cannot write codes that uses operations other than the order and equality on \code{DLO}.
 For instance, this disallows code snippets such as
 \color{magenta}
 \begin{verbatim}
-let r : Rational = (x.val + y.val)/2;
+let r : Rational64 = (x.val + y.val) / 2;
 let z : DLO = DLO::new(r);
 \end{verbatim}
 \color{black}

@@ -14,7 +14,6 @@ use atomic_hilbert::mon::Polynomial;
 use atomic_hilbert::tree::Tree;
 use num_rational::BigRational;
 use num_traits::Pow;
-use rug::Rational;
 use std::fmt::Display;
 use std::time::Instant;
 
@@ -24,7 +23,7 @@ fn c<A : AtomsWithOrd>(k : i64) -> Polynomial<BigRational, A> {
 
 /// The variable of the atom i of (Q, <).
 fn x(i : i64) -> Polynomial<BigRational, DLO> {
-    Polynomial::var(DLO::new(Rational::from(i)))
+    Polynomial::var(DLO::from_int(i))
 }
 
 /// The variable of the point of T_< given by a sequence (see `src/tree.rs`).

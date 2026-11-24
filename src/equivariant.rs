@@ -408,18 +408,17 @@ pub fn reduces_to_zero<F : Field, A : AtomsWithOrd>(f : &Polynomial<F, A>, orbit
     equivariant_normal_form(f.clone(), orbits).is_zero()
 }
 
-#[cfg(all(test, feature = "equivariant"))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::dlo::DLO;
     use num_traits::Zero;
     use num_rational::Rational64 as Q;
-    use rug::Rational;
 
     type P = Polynomial<Q, DLO>;
 
     fn d(i : i64) -> DLO {
-        DLO::new(Rational::from(i))
+        DLO::from_int(i)
     }
 
     fn x(i : i64) -> P {
@@ -672,6 +671,7 @@ mod tests {
     }
 
     /// Variables indexed by points of the dense meet-tree T_<.
+    #[cfg(feature = "equivariant")]
     mod trees {
         use super::*;
         use crate::tree::Tree;

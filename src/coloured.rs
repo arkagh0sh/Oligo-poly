@@ -91,22 +91,21 @@ impl<A> Product<Colour, A> {
     }
 }
 
-#[cfg(all(test, feature = "equivariant"))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::dlo::DLO;
     use crate::elements_with_atoms::ElementsWithAtoms;
     use itertools::Itertools;
-    use rug::Rational;
 
     type Y = Coloured<DLO>;
 
     fn low(i : i64) -> Y {
-        Coloured::new(Colour::Low, DLO::new(Rational::from(i)))
+        Coloured::new(Colour::Low, DLO::from_int(i))
     }
 
     fn high(i : i64) -> Y {
-        Coloured::new(Colour::High, DLO::new(Rational::from(i)))
+        Coloured::new(Colour::High, DLO::from_int(i))
     }
 
     #[test]
@@ -133,7 +132,7 @@ mod tests {
                 assert!(reps[i] != reps[j]);
             }
         }
-        let atoms = |set : &BTreeSet<Y>| set.iter().map(|y| y.atom().clone()).collect::<BTreeSet<DLO>>().len();
+        let atoms = |set : &BTreeSet<Y>| set.iter().map(|y| *y.atom()).collect::<BTreeSet<DLO>>().len();
         let n = atoms(first) + atoms(second);
         let universe : Vec<Y> = (1..=n as i64).flat_map(|i| [low(i), high(i)]).collect();
         let in_orbit = |set : &BTreeSet<Y>, len : usize| -> Vec<BTreeSet<Y>> {
