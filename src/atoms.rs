@@ -47,6 +47,33 @@ fn position<S : PartialEq>(v : &[S], x : &S) -> Option<usize> {
     v.iter().position(|y| y == x)
 }
 
+/// Whether `f` holds for every tuple of length `k` of numbers smaller than
+/// `n`, which are visited in lexicographic order until `f` fails. No tuple is
+/// allocated.
+pub(crate) fn all_tuples(n : usize, k : usize, mut f : impl FnMut(&[usize]) -> bool) -> bool {
+    if k > 0 && n == 0 {
+        return true;
+    }
+    let mut t = vec![0; k];
+    loop {
+        if !f(&t) {
+            return false;
+        }
+        let mut i = k;
+        loop {
+            if i == 0 {
+                return true;
+            }
+            i -= 1;
+            t[i] += 1;
+            if t[i] < n {
+                break;
+            }
+            t[i] = 0;
+        }
+    }
+}
+
 /// All tuples of length `k` of numbers smaller than `n`.
 fn index_tuples(n : usize, k : usize) -> Vec<Vec<usize>> {
     let mut tuples = vec![Vec::new()];
@@ -87,17 +114,31 @@ pub fn homogeneous_tuples_in_same_orbit<S : Structure>(first : &[S], second : &[
             return false;
         }
     }
-    // Close under the functions, until no new pair appears.
+    // The arguments of a symbol, on both sides; the buffers are reused.
+    let mut xs : Vec<S> = Vec::new();
+    let mut ys : Vec<S> = Vec::new();
+    // Close under the functions, until no new pair appears. Each pass applies
+    // the functions to the tuples of the pairs known at its start.
     loop {
         let mut new = false;
+        let n = a.len();
         for (f, (_, arity)) in signature.functions.iter().enumerate() {
-            for args in index_tuples(a.len(), *arity) {
-                let x = S::apply(f, &args.iter().map(|&i| a[i].clone()).collect::<Vec<_>>());
-                let y = S::apply(f, &args.iter().map(|&i| b[i].clone()).collect::<Vec<_>>());
+            let bijective = all_tuples(n, *arity, |args| {
+                xs.clear();
+                ys.clear();
+                xs.extend(args.iter().map(|&i| a[i].clone()));
+                ys.extend(args.iter().map(|&i| b[i].clone()));
+                let (x, y) = (S::apply(f, &xs), S::apply(f, &ys));
                 match add(&mut a, &mut b, x, y) {
-                    None => return false,
-                    Some(added) => new |= added,
+                    None => false,
+                    Some(added) => {
+                        new |= added;
+                        true
+                    }
                 }
+            });
+            if !bijective {
+                return false;
             }
         }
         if !new {
@@ -105,12 +146,20 @@ pub fn homogeneous_tuples_in_same_orbit<S : Structure>(first : &[S], second : &[
         }
     }
     // Check the relations, including the order if the signature has one.
-    signature.relations.iter().enumerate().all(|(r, (_, arity))| {
-        index_tuples(a.len(), *arity).iter().all(|args| {
-            S::holds(r, &args.iter().map(|&i| a[i].clone()).collect::<Vec<_>>())
-                == S::holds(r, &args.iter().map(|&i| b[i].clone()).collect::<Vec<_>>())
-        })
-    })
+    let n = a.len();
+    for (r, (_, arity)) in signature.relations.iter().enumerate() {
+        let preserved = all_tuples(n, *arity, |args| {
+            xs.clear();
+            ys.clear();
+            xs.extend(args.iter().map(|&i| a[i].clone()));
+            ys.extend(args.iter().map(|&i| b[i].clone()));
+            S::holds(r, &xs) == S::holds(r, &ys)
+        });
+        if !preserved {
+            return false;
+        }
+    }
+    true
 }
 
 /// The diagram of a tuple of length k: a formula in the variables 0, ..., k - 1

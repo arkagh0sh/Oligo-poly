@@ -20,7 +20,8 @@ use std::ops::{AddAssign, Div, Neg, Sub};
 use num_traits::{ConstOne, Zero};
 use crate::atoms::{AtomsWithOrd, Orbit};
 use crate::coloured::{Colour, Coloured};
-use crate::elements_with_atoms::ElementsWithAtoms;
+use crate::elements_with_atoms::{ElementsWithAtoms, PartialAut};
+use itertools::Itertools;
 use crate::mon::{Monomial, Polynomial};
 
 /// The operations on coefficients that the algorithms need: those of a field.
@@ -40,16 +41,33 @@ pub type OrbitList<F, A> = Vec<PolynomialOrbit<F, A>>;
 /// An element h of one of the `orbits` with supp(h) ⊆ `support` whose leading
 /// monomial divides `m`, if there is one. The search order only depends on the
 /// order of the atoms, so the choice is equivariant.
+///
+/// The elements of an orbit supported by `support` are the images of its
+/// representative g under the increasing bijections from supp(g) onto the
+/// subsets U of `support` in the orbit of supp(g). For each U, in the order of
+/// `combinations`, the image of LM(g) is tested first, since it is cheap; the
+/// orbit test follows, and g is mapped only when both succeed.
 fn find_reducer<F : Field, A : AtomsWithOrd>(
     m : &Monomial<A>,
     support : &BTreeSet<A>,
     orbits : &[PolynomialOrbit<F, A>],
 ) -> Option<Polynomial<F, A>> {
     orbits.iter().find_map(|orbit| {
-        orbit
-            .supported_by(support)
-            .into_iter()
-            .find(|h| !h.is_zero() && m.is_divisible_by(&h.leading_mon()))
+        let g = orbit.representative();
+        if g.is_zero() || g.leading_mon().degree() > m.degree() {
+            return None;
+        }
+        let domain = g.support();
+        let sorted : Vec<&A> = domain.iter().collect();
+        let leading = g.leading_mon();
+        support.iter().cloned().combinations(domain.len()).find_map(|subset| {
+            let image = |a : &A| subset[sorted.binary_search(&a).expect("a variable of LM(g) is in supp(g)")].clone();
+            if !m.is_divisible_by(&leading.map_variables(image)) {
+                return None;
+            }
+            let paut = PartialAut::new(&domain, &subset.iter().cloned().collect())?;
+            Some(g.apply_paut(&paut))
+        })
     })
 }
 

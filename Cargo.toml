@@ -32,3 +32,7 @@ required-features = ["equivariant"]
 [[example]]
 name = "elimination_scaling"
 required-features = ["equivariant"]
+
+[[example]]
+name = "profile_products"
+required-features = ["atoms"]
