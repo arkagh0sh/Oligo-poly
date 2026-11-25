@@ -1,12 +1,12 @@
 //! Concrete atoms (DLO, Tree) against symbolic atoms (DenseOrder, MeetTree)
 //! for larger tuples. Usage:
 //!   scaling_atoms product <dense-chain|tree-chain|tree-comb> <n> <concrete|symbolic>
-//!   scaling_atoms basis <dense|tree> <k> <concrete|symbolic> <colouring|one-colour>
+//!   scaling_atoms basis <dense|tree> <k> <concrete|symbolic> <colouring|one-colour> [creation|domain]
 use std::collections::BTreeSet;
 use std::time::Instant;
 use atomic_hilbert::atoms::{diagram, AtomsWithOrd, Orbit, Structure};
 use atomic_hilbert::dlo::DLO;
-use atomic_hilbert::equivariant::{equivariant_groebner_basis, one_colour_groebner_basis, OrbitList};
+use atomic_hilbert::equivariant::{equivariant_groebner_basis_with, one_colour_groebner_basis_with, OrbitList, Selection};
 use atomic_hilbert::logic::Description;
 use atomic_hilbert::mon::Polynomial;
 use atomic_hilbert::symbolic::{orbit_of, DenseOrder, MeetTree, SymbolicAtom, SymbolicTheory};
@@ -49,10 +49,14 @@ fn generator<A : AtomsWithOrd>(tuple : Vec<A>) -> OrbitList<Q, A> {
     vec![Orbit::new(product - x(k - 1))]
 }
 
-fn basis<A : AtomsWithOrd>(tuple : Vec<A>, one_colour : bool) {
+fn basis<A : AtomsWithOrd>(tuple : Vec<A>, one_colour : bool, selection : Selection) {
     let generators = generator(tuple);
     let start = Instant::now();
-    let result = if one_colour { one_colour_groebner_basis(generators, 2000) } else { equivariant_groebner_basis(generators, 2000) };
+    let result = if one_colour {
+        one_colour_groebner_basis_with(generators, 2000, selection)
+    } else {
+        equivariant_groebner_basis_with(generators, 2000, selection)
+    };
     match result {
         Ok(b) => println!("{} orbits in {:.3} s", b.len(), start.elapsed().as_secs_f64()),
         Err(b) => println!("limit reached ({} orbits) after {:.3} s", b.len(), start.elapsed().as_secs_f64()),
@@ -72,11 +76,12 @@ fn main() {
         ("product", "tree-comb") => product(symbolic::<Tree, MeetTree>(&tree_comb(n))),
         ("basis", theory) => {
             let one_colour = args[4] == "one-colour";
+            let selection = if args.get(5).map(String::as_str) == Some("domain") { Selection::SmallestDomain } else { Selection::Creation };
             match (theory, concrete) {
-                ("dense", true) => basis(dense_chain(n), one_colour),
-                ("dense", false) => basis(symbolic::<DLO, DenseOrder>(&dense_chain(n)), one_colour),
-                ("tree", true) => basis(tree_chain(n), one_colour),
-                (_, _) => basis(symbolic::<Tree, MeetTree>(&tree_chain(n)), one_colour),
+                ("dense", true) => basis(dense_chain(n), one_colour, selection),
+                ("dense", false) => basis(symbolic::<DLO, DenseOrder>(&dense_chain(n)), one_colour, selection),
+                ("tree", true) => basis(tree_chain(n), one_colour, selection),
+                (_, _) => basis(symbolic::<Tree, MeetTree>(&tree_chain(n)), one_colour, selection),
             }
         }
         _ => panic!("unknown case"),
