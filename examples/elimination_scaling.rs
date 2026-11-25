@@ -9,19 +9,20 @@
 //!   ideals, each computed by `ideal::elimination_ideal` (Buchberger's algorithm
 //!   for a lexicographic elimination order);
 //! - one-colour: `equivariant::one_colour_groebner_basis` with the variables of
-//!   `trivial.rs` (proved correct in `README.tex`);
+//!   `trivial.rs` (proved correct in `README.tex`), with its default options:
+//!   the order of creation and Buchberger's first criterion;
 //! - direct: `one_colour::one_colour_basis` with its default options, the same
 //!   algorithm without the orbit framework, with the adapted Buchberger
 //!   criteria and the pairs in the order of creation;
 //! - direct-plain: the same without the criteria, which makes the same
-//!   reductions as one-colour;
+//!   reductions as one-colour-plain;
 //! - direct-domain, one-colour-domain, colouring-domain: direct (with the
 //!   criteria), one-colour and colouring with the pairs of smallest domain
 //!   |supp(f) ∪ supp(g)| first;
-//! - one-colour-coprime, colouring-coprime: one-colour and colouring with
-//!   Buchberger's first criterion (positions with coprime leading monomials
-//!   are skipped);
-//! - colouring: `equivariant::equivariant_groebner_basis` (the full trick);
+//! - one-colour-plain, colouring-plain: one-colour and colouring without
+//!   Buchberger's first criterion;
+//! - colouring: `equivariant::equivariant_groebner_basis` (the full trick),
+//!   with its default options;
 //! - ordinary: `ideal::buchberger`, which does not have the property in general;
 //! - gfan: the union of all reduced Gröbner bases, computed by the program
 //!   `gfan_bases` of gfan (which must be installed, for example with
@@ -114,7 +115,7 @@ use std::time::{Duration, Instant};
 type Q = BigRational;
 type P = Polynomial<Q, FinOrd>;
 
-const METHODS : [&str; 12] = ["elimination", "one-colour", "direct", "direct-plain", "colouring", "ordinary", "gfan", "direct-domain", "one-colour-domain", "colouring-domain", "one-colour-coprime", "colouring-coprime"];
+const METHODS : [&str; 12] = ["elimination", "one-colour", "direct", "direct-plain", "colouring", "ordinary", "gfan", "direct-domain", "one-colour-domain", "colouring-domain", "one-colour-plain", "colouring-plain"];
 
 /// The command-line options of the parent process.
 struct Options {
@@ -283,7 +284,7 @@ fn compute(method : &str, generators : &[P]) -> Option<Vec<P>> {
     let polynomials = |b : OrbitList<Q, FinOrd>| -> Vec<P> { b.iter().map(|o| o.evaluate(|p| p.clone())).collect() };
     let orbits = || -> OrbitList<Q, FinOrd> { generators.iter().cloned().map(Orbit::new).collect() };
     let domain = OrbitOptions { selection : Selection::SmallestDomain, first_criterion : false };
-    let coprime = OrbitOptions { selection : Selection::Creation, first_criterion : true };
+    let plain = OrbitOptions { selection : Selection::Creation, first_criterion : false };
     match method {
         "elimination" => {
             let vars : Vec<FinOrd> = generators.iter().flat_map(|g| g.domain()).collect::<BTreeSet<FinOrd>>().into_iter().collect();
@@ -303,8 +304,8 @@ fn compute(method : &str, generators : &[P]) -> Option<Vec<P>> {
         "direct-domain" => Some(one_colour_basis(generators.to_vec(), DirectOptions { criteria : true, strategy : Strategy::SmallestDomain })),
         "one-colour-domain" => one_colour_groebner_basis_with(orbits(), 1_000_000, domain).ok().map(polynomials),
         "colouring-domain" => equivariant_groebner_basis_with(orbits(), 1_000_000, domain).ok().map(polynomials),
-        "one-colour-coprime" => one_colour_groebner_basis_with(orbits(), 1_000_000, coprime).ok().map(polynomials),
-        "colouring-coprime" => equivariant_groebner_basis_with(orbits(), 1_000_000, coprime).ok().map(polynomials),
+        "one-colour-plain" => one_colour_groebner_basis_with(orbits(), 1_000_000, plain).ok().map(polynomials),
+        "colouring-plain" => equivariant_groebner_basis_with(orbits(), 1_000_000, plain).ok().map(polynomials),
         "colouring" => equivariant_groebner_basis(orbits(), 1_000_000).ok().map(polynomials),
         "ordinary" => Some(buchberger(generators.to_vec())),
         _ => panic!("unknown method {method}"),

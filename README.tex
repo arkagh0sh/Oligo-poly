@@ -576,21 +576,21 @@ that does not reduce to zero, until all S-polynomials reduce to zero.
 Its result is a \emphdef{weak equivariant Gr\"{o}bner basis} \cite[Lemma 24]{GL25},
 which is not always an equivariant Gr\"{o}bner basis.
 For example, for $H$ the orbit of $x_a x_b - x_c$ with $a < b < c$ in $\dloQ$,
-it stops with $5$ orbits, whose minimal elements are the orbits of
+it stops with $4$ orbits ($5$ without the first criterion, see below), whose minimal elements are the orbits of
 $x_c - x_a x_b$, $x_a^2 x_b - x_a x_b$ and $x_a x_b^2 - x_a x_b$.
 However, $x_b - x_a \in I$ for $a < b$:
 there are atoms $c < d < a$, and $x_a \equiv x_c x_d \equiv x_b$ modulo $I$.
 No element $h$ of the $5$ orbits with $\mathsf{supp}(h) \subseteq \{a, b\}$
 has a leading monomial dividing $x_b$, so $x_b - x_a$ does not reduce to zero.
 Similarly, for $H$ the orbit of $x_a^2 - x_b$ with $a < b$,
-the algorithm stops with the orbits of $x_b - x_a^2$, $x_a^4 - x_a^2$ and $x_a^6 - x_a^4$,
-and the minimal elements are the orbits of $x_b - x_a^2$ and $x_a^4 - x_a^2$.
+the algorithm stops with the orbits of $x_b - x_a^2$ and $x_a^4 - x_a^2$
+(without the first criterion, it also adds the orbit of $x_a^6 - x_a^4$).
 However, $x_a^2 - x_a \in I$:
 for an atom $c < a$, we have $x_a \equiv x_c^2$ and $x_c^4 \equiv x_c^2$,
 so $x_a^2 \equiv x_c^4 \equiv x_c^2 \equiv x_a$ modulo $I$.
 The elements $h$ of the result with $\mathsf{supp}(h) \subseteq \{a\}$
-are in the orbits of $x_a^4 - x_a^2$ and $x_a^6 - x_a^4$,
-and neither $x_a^4$ nor $x_a^6$ divides $x_a^2$,
+are in the orbit of $x_a^4 - x_a^2$,
+and $x_a^4$ does not divide $x_a^2$,
 so $x_a^2 - x_a$ does not reduce to zero.
 In both examples, the derivation needs atoms below the atoms of the polynomial,
 which the support condition forbids.
@@ -617,7 +617,7 @@ so every variable of $m h$ is low and lies over $V$.
 Hence $\mathsf{forget}(h)$ satisfies $\mathsf{supp}(\mathsf{forget}(h)) \subseteq V$
 and its leading monomial divides $\mathsf{LM}(f)$.
 
-In the example above, \code{equivariant\_groebner\_basis} computes $10$ coloured orbits,
+In the example above, \code{equivariant\_groebner\_basis} returns $7$ orbits ($10$ without the first criterion),
 and the minimal elements of the result are the orbits of $x_b - x_a$ and $x_a^2 - x_a$.
 So $I$ is the ideal of the polynomials that vanish at $(0, 0, \dots)$ and at $(1, 1, \dots)$.
 The example \code{equivariant\_demo} runs both functions on several ideals.
@@ -660,6 +660,57 @@ The file \code{one\_colour.rs} implements the same algorithm for finitely many v
 without the orbit framework, optionally with Buchberger's criteria adapted to the support condition.
 In the experiments, it was much faster than the union of the $2^n$ elimination bases from about $8$ variables on.
 %
+\paragraph{Buchberger's first criterion.}
+By default (\code{Options::first\_criterion}), both orbit algorithms skip every orbit of pairs $(p, q)$
+whose leading monomials are coprime, that is, share no atom.
+An automorphism maps atoms to atoms, so either all pairs of an orbit of pairs have coprime leading monomials, or none;
+the condition is decided once for each orbit.
+On $30$ random ideals in $4$ to $6$ variables and on symbolic atoms,
+this made both algorithms faster on every input, by factors up to $12$.
+The criterion keeps the results correct, by the following lemma and proposition.
+
+\begin{lemma}\label{lem:first criterion}
+Let $\mathcal{Z}$ be a set of atoms with a total order,
+and let $b, b' \in \poly{\F}{\mathcal{Z}}$ be non-zero polynomials whose leading monomials are coprime.
+Then the pair $(b, b')$ is settled by $\{b, b'\}$ (\cref{sec:one colour}).
+\end{lemma}
+
+\begin{proof}
+Write $b = c\,\LM(b) + b_1$ and $b' = c'\,\LM(b') + b'_1$.
+Since the leading monomials are coprime, $\mathrm{lcm}(\LM(b), \LM(b')) = \LM(b)\LM(b')$,
+and a direct computation gives $S(b, b') = (b_1\, b' - b'_1\, b)/(c c')$.
+Expand $b_1 b'$ as the sum of the products $t\, b'$ over the terms $t$ of $b_1$, and $b'_1 b$ in the same way.
+The monomial of a term $t$ of $b_1$ is smaller than $\LM(b)$, so $\LM(t\, b') \prec \LM(b)\LM(b')$ by (O1);
+the same holds for the terms of $b'_1$.
+All atoms of these products are atoms of $b$ or $b'$.
+This is a decomposition of $S(b, b')$ as required.
+\end{proof}
+
+\begin{proposition}
+With the first criterion, the result of \code{equivariant\_groebner\_basis} is still an equivariant Gr\"{o}bner basis of $I$.
+\end{proposition}
+
+\begin{proof}
+Let $B_\star$ be the result of \code{equivariant\_buchberger} on the coloured generators, as above.
+We show that every pair $(b, b')$ of elements of $B_\star$ is settled by $B_\star$.
+If its orbit of pairs was skipped, this is \cref{lem:first criterion}.
+Otherwise the pair, or a pair in its orbit, was treated; applying $\pi^{-1}$ as in the proof of \cref{lem:settled},
+we may assume that the pair itself was treated.
+The reduction of $S = S(b, b')$ only uses elements $g$ with $\supp(g) \subseteq \supp(S) \subseteq \supp(b) \cup \supp(b')$,
+multiplied by monomials whose atoms are in the support of the current polynomial,
+and every reduced monomial is at most $\LM(S) \prec \mathrm{lcm}(\LM(b), \LM(b'))$.
+If the normal form $r$ is not zero, its orbit is added to $B_\star$, and $r$ gives one more term, with $\LM(r) \preceq \LM(S)$.
+This is a decomposition of $S$ as required.
+
+So \cref{lem:weak basis}, applied to $\mathcal{Z} = \mathcal{Y}$ and $B = B_\star$, holds:
+a polynomial with a decomposition $\partial$ has a decomposition $\partial'$
+with $\mathsf{dom}(\partial') \subseteq \mathsf{dom}(\partial)$ and $\LM(\partial') = \LM(p)$.
+This is the only property of $B_\star$ that the proof of \cite[Lemma 28]{GL25}, sketched above, uses.
+So that proof applies unchanged.
+For the one-colour variant, the criterion is part of (A3) in \cref{sec:one colour},
+and the proof of \cref{lem:settled} already covers it.
+\end{proof}
+
 \section{Dense meet-trees}\label{sec:trees}
 %
 The file \code{tree.rs} implements the atoms of the universal countable dense meet-tree with a lexicographic order,
@@ -851,10 +902,11 @@ if moreover $r$ has no high atom, then $\col_x(\forget(r'))$ is also added, with
 for every atom $x$ of $\forget(r')$.
 \item[(A3)] Elements are never removed from $B$.
 The algorithm stops when every pair of elements of $B$ with consistent colours,
-up to the action of $G$, has been treated,
-or has been skipped by one of the two criteria of \code{one\_colour.rs} (trivial group only):
-the pair $(b_i, b_j)$ is skipped if $\LM(b_i)$ and $\LM(b_j)$ are coprime,
-or if some $b_k$ with $k \notin \{i, j\}$, $\LM(b_k)$ dividing $\mathrm{lcm}(\LM(b_i), \LM(b_j))$
+up to the action of $G$, has been treated or skipped.
+A pair $(b_i, b_j)$ may be skipped by Buchberger's first criterion,
+if $\LM(b_i)$ and $\LM(b_j)$ are coprime (both implementations, any group; by default),
+or by the chain criterion of \code{one\_colour.rs} (trivial group only),
+if some $b_k$ with $k \notin \{i, j\}$, $\LM(b_k)$ dividing $\mathrm{lcm}(\LM(b_i), \LM(b_j))$
 and $\supp(b_k) \subseteq \supp(b_i) \cup \supp(b_j)$
 has both pairs $(b_i, b_k)$ and $(b_j, b_k)$ already treated or skipped.
 \end{itemize}

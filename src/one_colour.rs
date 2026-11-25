@@ -325,11 +325,16 @@ mod tests {
         [false, true].into_iter().flat_map(|criteria| strategies.map(|strategy| Options { criteria, strategy })).collect()
     }
 
-    /// The options used on random ideals: the normal strategy can be very slow
-    /// for this algorithm, so it is left out.
+    /// The options used on random ideals: the order of creation with and
+    /// without the criteria, and the smallest domain first with the criteria.
+    /// The other strategies can be very slow on some of these ideals (the
+    /// normal strategy, and the smallest domain first without the criteria).
     fn creation_order_options() -> Vec<Options> {
-        let strategies = [Strategy::Creation, Strategy::SmallestDomain];
-        [false, true].into_iter().flat_map(|criteria| strategies.map(|strategy| Options { criteria, strategy })).collect()
+        vec![
+            Options { criteria : false, strategy : Strategy::Creation },
+            Options { criteria : true, strategy : Strategy::Creation },
+            Options { criteria : true, strategy : Strategy::SmallestDomain },
+        ]
     }
 
     #[test]

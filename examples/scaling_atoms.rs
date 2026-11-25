@@ -1,7 +1,7 @@
 //! Concrete atoms (DLO, Tree) against symbolic atoms (DenseOrder, MeetTree)
 //! for larger tuples. Usage:
 //!   scaling_atoms product <dense-chain|tree-chain|tree-comb> <n> <concrete|symbolic>
-//!   scaling_atoms basis <dense|tree> <k> <concrete|symbolic> <colouring|one-colour> [creation|domain|coprime]
+//!   scaling_atoms basis <dense|tree> <k> <concrete|symbolic> <colouring|one-colour> [default|domain|plain]
 use std::collections::BTreeSet;
 use std::time::Instant;
 use atomic_hilbert::atoms::{diagram, AtomsWithOrd, Orbit, Structure};
@@ -78,7 +78,7 @@ fn main() {
             let one_colour = args[4] == "one-colour";
             let selection = match args.get(5).map(String::as_str) {
                 Some("domain") => Options { selection : Selection::SmallestDomain, first_criterion : false },
-                Some("coprime") => Options { selection : Selection::Creation, first_criterion : true },
+                Some("plain") => Options { selection : Selection::Creation, first_criterion : false },
                 _ => Options::default(),
             };
             match (theory, concrete) {

@@ -139,8 +139,10 @@ pub enum Selection {
     SmallestDomain,
 }
 
-/// The options of the orbit algorithms.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// The options of the orbit algorithms. By default, the pairs are treated in
+/// the order of creation, with the first criterion, which was faster on every
+/// ideal measured (`CLAUDE.md`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Options {
     /// The order in which the S-polynomials are treated.
     pub selection : Selection,
@@ -150,6 +152,12 @@ pub struct Options {
     /// (`README.tex`). The condition is invariant under automorphisms, so it is
     /// decided once for each orbit of pairs.
     pub first_criterion : bool,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Options { selection : Selection::Creation, first_criterion : true }
+    }
 }
 
 /// Whether the leading monomials of p and q share no atom.
@@ -724,14 +732,17 @@ mod tests {
 
     #[test]
     fn limit_on_the_number_of_orbits() {
-        // The computation for <x_a x_b - x_c : a < b < c> needs 5 orbits.
+        // The computation for <x_a x_b - x_c : a < b < c> needs 4 orbits with
+        // the first criterion, and 5 without it.
         let generators = vec![orbit(x(1) * x(2) - x(3))];
-        assert_eq!(equivariant_buchberger(generators.clone(), 50).ok().unwrap().len(), 5);
+        assert_eq!(equivariant_buchberger(generators.clone(), 50).ok().unwrap().len(), 4);
+        let without = Options { first_criterion : false, ..Options::default() };
+        assert_eq!(equivariant_buchberger_with(generators.clone(), 50, without).ok().unwrap().len(), 5);
         let partial = equivariant_buchberger(generators, 2).err().unwrap();
         assert_eq!(partial.len(), 2);
     }
 
-    /// For <x_a x_b - x_c : a < b < c>, `equivariant_buchberger` stops with 5 orbits,
+    /// For <x_a x_b - x_c : a < b < c>, `equivariant_buchberger` stops with 4 orbits,
     /// but the polynomial f below, which is in the ideal, has the non-zero normal
     /// form x_3 - x_1 x_3: every decomposition of x_3 - x_1 x_3 uses other atoms.
     /// With the colouring of Section 5 of Ghosh and Lopez, the basis is correct.
@@ -787,11 +798,12 @@ mod tests {
         a.len() == b.len() && a.iter().all(|o| b.contains(o))
     }
 
-    /// The variants of the options tested against the default options.
+    /// The variants of the options tested against the default options (the
+    /// order of creation with the first criterion).
     fn variants() -> [Options; 3] {
         [
+            Options { selection : Selection::Creation, first_criterion : false },
             Options { selection : Selection::SmallestDomain, first_criterion : false },
-            Options { selection : Selection::Creation, first_criterion : true },
             Options { selection : Selection::SmallestDomain, first_criterion : true },
         ]
     }
