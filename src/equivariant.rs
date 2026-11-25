@@ -139,6 +139,25 @@ pub enum Selection {
     SmallestDomain,
 }
 
+/// The options of the orbit algorithms.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Options {
+    /// The order in which the S-polynomials are treated.
+    pub selection : Selection,
+    /// Buchberger's first criterion: skip the positions (p, q) whose leading
+    /// monomials are coprime, that is, share no atom. Such a pair is settled by
+    /// p and q alone, which is all that the correctness proofs need
+    /// (`README.tex`). The condition is invariant under automorphisms, so it is
+    /// decided once for each orbit of pairs.
+    pub first_criterion : bool,
+}
+
+/// Whether the leading monomials of p and q share no atom.
+fn coprime_leading_monomials<F : Field, A : AtomsWithOrd>(p : &Polynomial<F, A>, q : &Polynomial<F, A>) -> bool {
+    let (a, b) = (p.leading_mon(), q.leading_mon());
+    a.lcm(&b) == a * b
+}
+
 /// An orbit of pairs (p, q) of elements of two orbits of the basis: a position
 /// of the two orbits, whose S-polynomial is to be treated.
 type Position<F, A> = Orbit<A, (Polynomial<F, A>, Polynomial<F, A>)>;
@@ -213,15 +232,14 @@ pub fn equivariant_buchberger<F : Field, A : AtomsWithOrd>(
     generators : OrbitList<F, A>,
     max_orbits : usize,
 ) -> Result<OrbitList<F, A>, OrbitList<F, A>> {
-    equivariant_buchberger_with(generators, max_orbits, Selection::Creation)
+    equivariant_buchberger_with(generators, max_orbits, Options::default())
 }
 
-/// `equivariant_buchberger`, with the S-polynomials treated in the order of
-/// `selection`.
+/// `equivariant_buchberger`, with the given options.
 pub fn equivariant_buchberger_with<F : Field, A : AtomsWithOrd>(
     generators : OrbitList<F, A>,
     max_orbits : usize,
-    selection : Selection,
+    options : Options,
 ) -> Result<OrbitList<F, A>, OrbitList<F, A>> {
     let mut basis : Vec<PolynomialOrbit<F, A>> = Vec::new();
     for g in generators {
@@ -232,8 +250,8 @@ pub fn equivariant_buchberger_with<F : Field, A : AtomsWithOrd>(
             }
         }
     }
-    let all = |_ : &Polynomial<F, A>, _ : &Polynomial<F, A>| true;
-    let mut pending = Pending::new(selection);
+    let all = |p : &Polynomial<F, A>, q : &Polynomial<F, A>| !(options.first_criterion && coprime_leading_monomials(p, q));
+    let mut pending = Pending::new(options.selection);
     for k in 0..basis.len() {
         pending.add_orbit(&basis, k, &all);
     }
@@ -301,15 +319,14 @@ pub fn equivariant_groebner_basis<F : Field, A : AtomsWithOrd>(
     generators : OrbitList<F, A>,
     max_orbits : usize,
 ) -> Result<OrbitList<F, A>, OrbitList<F, A>> {
-    equivariant_groebner_basis_with(generators, max_orbits, Selection::Creation)
+    equivariant_groebner_basis_with(generators, max_orbits, Options::default())
 }
 
-/// `equivariant_groebner_basis`, with the S-polynomials treated in the order
-/// of `selection`.
+/// `equivariant_groebner_basis`, with the given options.
 pub fn equivariant_groebner_basis_with<F : Field, A : AtomsWithOrd>(
     generators : OrbitList<F, A>,
     max_orbits : usize,
-    selection : Selection,
+    options : Options,
 ) -> Result<OrbitList<F, A>, OrbitList<F, A>> {
     let mut coloured : OrbitList<F, Coloured<A>> = Vec::new();
     for g in &generators {
@@ -319,7 +336,7 @@ pub fn equivariant_groebner_basis_with<F : Field, A : AtomsWithOrd>(
             }
         }
     }
-    equivariant_buchberger_with(coloured, max_orbits, selection).map(|b| forget_all(&b)).map_err(|b| forget_all(&b))
+    equivariant_buchberger_with(coloured, max_orbits, options).map(|b| forget_all(&b)).map_err(|b| forget_all(&b))
 }
 
 /// The orbits of forget(p) for the orbits in `orbits`, made monic, without the
@@ -395,19 +412,20 @@ pub fn one_colour_groebner_basis<F : Field, A : AtomsWithOrd>(
     generators : OrbitList<F, A>,
     max_orbits : usize,
 ) -> Result<OrbitList<F, A>, OrbitList<F, A>> {
-    one_colour_groebner_basis_with(generators, max_orbits, Selection::Creation)
+    one_colour_groebner_basis_with(generators, max_orbits, Options::default())
 }
 
-/// `one_colour_groebner_basis`, with the S-polynomials treated in the order of
-/// `selection`.
+/// `one_colour_groebner_basis`, with the given options.
 pub fn one_colour_groebner_basis_with<F : Field, A : AtomsWithOrd>(
     generators : OrbitList<F, A>,
     max_orbits : usize,
-    selection : Selection,
+    options : Options,
 ) -> Result<OrbitList<F, A>, OrbitList<F, A>> {
     let mut basis : OrbitList<F, Coloured<A>> = Vec::new();
-    let mut pending = Pending::new(selection);
-    let consistent = |p : &Polynomial<F, Coloured<A>>, q : &Polynomial<F, Coloured<A>>| consistent_colours(p, q);
+    let mut pending = Pending::new(options.selection);
+    let consistent = |p : &Polynomial<F, Coloured<A>>, q : &Polynomial<F, Coloured<A>>| {
+        consistent_colours(p, q) && !(options.first_criterion && coprime_leading_monomials(p, q))
+    };
     // Adds an orbit if it is new, with the pairs that it forms; returns false
     // if the limit on the number of orbits is reached.
     let add = |basis : &mut OrbitList<F, Coloured<A>>, pending : &mut Pending<F, Coloured<A>>, o : PolynomialOrbit<F, Coloured<A>>| -> bool {
@@ -769,10 +787,20 @@ mod tests {
         a.len() == b.len() && a.iter().all(|o| b.contains(o))
     }
 
-    /// With the smallest domain first, both algorithms give bases that decide
-    /// membership, with the same leading data as in the order of creation.
+    /// The variants of the options tested against the default options.
+    fn variants() -> [Options; 3] {
+        [
+            Options { selection : Selection::SmallestDomain, first_criterion : false },
+            Options { selection : Selection::Creation, first_criterion : true },
+            Options { selection : Selection::SmallestDomain, first_criterion : true },
+        ]
+    }
+
+    /// With the smallest domain first or the first criterion, both algorithms
+    /// give bases that decide membership, with the same leading data as with
+    /// the default options.
     #[test]
-    fn smallest_domain_first() {
+    fn variants_of_the_options() {
         let two_points = |f : &P| value_on_diagonal(f, 1).is_zero() && value_on_diagonal(f, -1).is_zero();
         type Membership<'a> = &'a dyn Fn(&P) -> bool;
         let cases : Vec<(Vec<P>, Membership)> = vec![
@@ -781,15 +809,17 @@ mod tests {
             (vec![x(2) - x(1), x(1) * x(1) - c(1)], &two_points),
             (vec![x(1) - x(2)], &vanishes_on_the_diagonal::<DLO>),
         ];
-        type Algorithm = fn(OrbitList<Q, DLO>, usize, Selection) -> Result<OrbitList<Q, DLO>, OrbitList<Q, DLO>>;
+        type Algorithm = fn(OrbitList<Q, DLO>, usize, Options) -> Result<OrbitList<Q, DLO>, OrbitList<Q, DLO>>;
         let algorithms : [Algorithm; 2] = [equivariant_groebner_basis_with, one_colour_groebner_basis_with];
         for (generators, is_member) in &cases {
             let orbits : Vec<_> = generators.iter().cloned().map(orbit).collect();
             for algorithm in algorithms {
-                let basis = algorithm(orbits.clone(), 200, Selection::SmallestDomain).ok().unwrap();
-                check_membership(&dlo_atoms(), generators, &basis, is_member);
-                let reference = algorithm(orbits.clone(), 200, Selection::Creation).ok().unwrap();
-                assert!(same_orbits(&leading_data(basis), &leading_data(reference)), "{generators:?}");
+                let reference = algorithm(orbits.clone(), 200, Options::default()).ok().unwrap();
+                for options in variants() {
+                    let basis = algorithm(orbits.clone(), 200, options).ok().unwrap();
+                    check_membership(&dlo_atoms(), generators, &basis, is_member);
+                    assert!(same_orbits(&leading_data(basis), &leading_data(reference.clone())), "{generators:?} {options:?}");
+                }
             }
         }
     }
@@ -835,11 +865,11 @@ mod tests {
             check_membership(&tree_atoms(), &generators, &basis, vanishes_on_the_diagonal);
         }
 
-        /// With the smallest domain first, both algorithms give bases that
-        /// decide membership, with the same leading data as in the order of
-        /// creation.
+        /// With the smallest domain first or the first criterion, both
+        /// algorithms give bases that decide membership, with the same leading
+        /// data as with the default options.
         #[test]
-        fn smallest_domain_first_on_trees() {
+        fn variants_of_the_options_on_trees() {
             for generators in [vec![y(&[1]) - y(&[0])], vec![y(&[1]) - y(&[0]) * y(&[0])]] {
                 let orbits : Vec<_> = generators.iter().cloned().map(Orbit::new).collect();
                 let is_member = |f : &T| if generators[0].leading_mon().degree() == 1 && generators[0].monomials().all(|m| m.degree() == 1) {
@@ -847,13 +877,15 @@ mod tests {
                 } else {
                     vanishes_at_zero_and_one(f)
                 };
-                type Algorithm = fn(OrbitList<Q, Tree>, usize, Selection) -> Result<OrbitList<Q, Tree>, OrbitList<Q, Tree>>;
+                type Algorithm = fn(OrbitList<Q, Tree>, usize, Options) -> Result<OrbitList<Q, Tree>, OrbitList<Q, Tree>>;
                 let algorithms : [Algorithm; 2] = [equivariant_groebner_basis_with, one_colour_groebner_basis_with];
                 for algorithm in algorithms {
-                    let basis = algorithm(orbits.clone(), 200, Selection::SmallestDomain).ok().unwrap();
-                    check_membership(&tree_atoms(), &generators, &basis, is_member);
-                    let reference = algorithm(orbits.clone(), 200, Selection::Creation).ok().unwrap();
-                    assert!(same_orbits(&leading_data(basis), &leading_data(reference)));
+                    let reference = algorithm(orbits.clone(), 200, Options::default()).ok().unwrap();
+                    for options in variants() {
+                        let basis = algorithm(orbits.clone(), 200, options).ok().unwrap();
+                        check_membership(&tree_atoms(), &generators, &basis, is_member);
+                        assert!(same_orbits(&leading_data(basis), &leading_data(reference.clone())));
+                    }
                 }
             }
         }
