@@ -167,8 +167,8 @@ fn closure(set : &BTreeSet<Tree>) -> BTreeSet<Tree> {
 
 /// The largest point of `c` strictly below `u` in the tree order, if any. The
 /// points below `u` form a chain, on which the two orders agree.
-fn parent(c : &BTreeSet<Tree>, u : &Tree) -> Option<Tree> {
-    c.iter().filter(|p| *p != u && p.is_below(u)).max().cloned()
+fn parent<'a>(c : &'a BTreeSet<Tree>, u : &Tree) -> Option<&'a Tree> {
+    c.iter().filter(|p| *p != u && p.is_below(u)).max()
 }
 
 /// One representative b of every orbit of points under the automorphisms that
@@ -187,11 +187,13 @@ fn parent(c : &BTreeSet<Tree>, u : &Tree) -> Option<Tree> {
 fn one_point_extensions(x : &BTreeSet<Tree>) -> Vec<Tree> {
     let c = closure(x);
     let mut points : Vec<Tree> = c.iter().cloned().collect();
+    // The parent of each point of C, computed once.
+    let parents : Vec<(&Tree, Option<&Tree>)> = c.iter().map(|v| (v, parent(&c, v))).collect();
     for u in &c {
-        let mut labels : Vec<Rational> = c
+        let mut labels : Vec<Rational> = parents
             .iter()
-            .filter(|v| *v != u && u.is_below(v) && parent(&c, v).as_ref() == Some(u))
-            .map(|v| v.direction(u))
+            .filter(|(_, p)| *p == Some(u))
+            .map(|(v, _)| v.direction(u))
             .collect();
         labels.sort();
         match (labels.first(), labels.last()) {
@@ -204,7 +206,7 @@ fn one_point_extensions(x : &BTreeSet<Tree>) -> Vec<Tree> {
             }
             _ => points.push(u.above_in_direction(&Rational::new())),
         }
-        let w = match parent(&c, u) {
+        let w = match parents.iter().find(|(v, _)| *v == u).and_then(|(_, p)| *p) {
             Some(p) => p.between(u),
             None => u.below(),
         };
@@ -236,10 +238,42 @@ fn same_type(first : &[Tree], second : &[Tree]) -> bool {
     true
 }
 
+/// The meets of the pairs of a list of points: `meets[j][i]` = p_i ∧ p_j for
+/// i <= j.
+fn meet_table(points : &[Tree]) -> Vec<Vec<Tree>> {
+    (0..points.len()).map(|j| (0..=j).map(|i| points[i].meet(&points[j])).collect()).collect()
+}
+
+/// Whether the increasing bijection from `first` onto `second` preserves the
+/// relation a ∧ b <= c on the triples that involve the last point, given the
+/// tables of meets of both lists. If it preserves it on the other triples, it
+/// then preserves it on all of them, which is `same_type`.
+fn same_type_at_last(first : &[Tree], first_meets : &[Vec<Tree>], second : &[Tree], second_meets : &[Vec<Tree>]) -> bool {
+    let last = first.len() - 1;
+    // a ∧ b <= c where c is the last point.
+    let below_last = (0..=last).all(|j| {
+        (0..=j).all(|i| first_meets[j][i].is_below(&first[last]) == second_meets[j][i].is_below(&second[last]))
+    });
+    // a ∧ b <= c where a or b is the last point.
+    below_last
+        && (0..=last).all(|i| {
+            (0..=last).all(|l| first_meets[last][i].is_below(&first[l]) == second_meets[last][i].is_below(&second[l]))
+        })
+}
+
 /// Extends `chosen` (an increasing list) by points greater than its last point,
 /// in all ways up to the automorphisms that fix `fixed` and `chosen`, such that
-/// the result has the type of `target`.
-fn extend(fixed : &BTreeSet<Tree>, chosen : &mut Vec<Tree>, target : &[Tree], out : &mut Vec<BTreeSet<Tree>>) {
+/// the result has the type of `target`. Each new point is checked against
+/// `target` only on the triples that involve it, since the shorter list was
+/// checked before; `chosen_meets` and `target_meets` keep the meets of pairs.
+fn extend(
+    fixed : &BTreeSet<Tree>,
+    chosen : &mut Vec<Tree>,
+    chosen_meets : &mut Vec<Vec<Tree>>,
+    target : &[Tree],
+    target_meets : &[Vec<Tree>],
+    out : &mut Vec<BTreeSet<Tree>>,
+) {
     if chosen.len() == target.len() {
         out.push(chosen.iter().cloned().collect());
         return;
@@ -249,10 +283,14 @@ fn extend(fixed : &BTreeSet<Tree>, chosen : &mut Vec<Tree>, target : &[Tree], ou
         if chosen.last().is_some_and(|last| b <= *last) {
             continue;
         }
+        let row : Vec<Tree> = chosen.iter().chain(std::iter::once(&b)).map(|a| a.meet(&b)).collect();
         chosen.push(b);
-        if same_type(chosen, &target[..chosen.len()]) {
-            extend(fixed, chosen, target, out);
+        chosen_meets.push(row);
+        let n = chosen.len();
+        if same_type_at_last(chosen, chosen_meets, &target[..n], &target_meets[..n]) {
+            extend(fixed, chosen, chosen_meets, target, target_meets, out);
         }
+        chosen_meets.pop();
         chosen.pop();
     }
 }
@@ -310,8 +348,9 @@ impl AtomsWithOrd for Tree {
     fn orbits_in_product(first : &BTreeSet<Self>, second : &BTreeSet<Self>)
         -> Vec<SetPairOrbit<Self>> {
         let target : Vec<Tree> = second.iter().cloned().collect();
+        let target_meets = meet_table(&target);
         let mut out = Vec::new();
-        extend(first, &mut Vec::new(), &target, &mut out);
+        extend(first, &mut Vec::new(), &mut Vec::new(), &target, &target_meets, &mut out);
         out.into_iter().map(|t| Orbit::new((first.clone(), t))).collect()
     }
 }
