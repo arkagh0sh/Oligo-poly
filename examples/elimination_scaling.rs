@@ -9,13 +9,20 @@
 //!   ideals, each computed by `ideal::elimination_ideal` (Buchberger's algorithm
 //!   for a lexicographic elimination order);
 //! - one-colour: `equivariant::one_colour_groebner_basis` with the variables of
-//!   `trivial.rs` (proved correct in `README.tex`);
+//!   `trivial.rs` (proved correct in `README.tex`), with its default options:
+//!   the order of creation and Buchberger's first criterion;
 //! - direct: `one_colour::one_colour_basis` with its default options, the same
 //!   algorithm without the orbit framework, with the adapted Buchberger
 //!   criteria and the pairs in the order of creation;
 //! - direct-plain: the same without the criteria, which makes the same
-//!   reductions as one-colour;
-//! - colouring: `equivariant::equivariant_groebner_basis` (the full trick);
+//!   reductions as one-colour-plain;
+//! - direct-domain, one-colour-domain, colouring-domain: direct (with the
+//!   criteria), one-colour and colouring with the pairs of smallest domain
+//!   |supp(f) ∪ supp(g)| first;
+//! - one-colour-plain, colouring-plain: one-colour and colouring without
+//!   Buchberger's first criterion;
+//! - colouring: `equivariant::equivariant_groebner_basis` (the full trick),
+//!   with its default options;
 //! - ordinary: `ideal::buchberger`, which does not have the property in general;
 //! - gfan: the union of all reduced Gröbner bases, computed by the program
 //!   `gfan_bases` of gfan (which must be installed, for example with
@@ -89,10 +96,13 @@
 
 use atomic_hilbert::atoms::Orbit;
 use atomic_hilbert::counters::{self, Counts};
-use atomic_hilbert::equivariant::{equivariant_groebner_basis, minimal_basis, one_colour_groebner_basis, OrbitList};
+use atomic_hilbert::equivariant::{
+    equivariant_groebner_basis, equivariant_groebner_basis_with, minimal_basis, one_colour_groebner_basis,
+    one_colour_groebner_basis_with, OrbitList, Options as OrbitOptions, Selection,
+};
 use atomic_hilbert::ideal::{buchberger, elimination_ideal};
 use atomic_hilbert::mon::{Monomial, Polynomial};
-use atomic_hilbert::one_colour::{one_colour_basis, Options as DirectOptions};
+use atomic_hilbert::one_colour::{one_colour_basis, Options as DirectOptions, Strategy};
 use atomic_hilbert::trivial::FinOrd;
 use num_rational::BigRational;
 use num_traits::{One, Pow, Zero};
@@ -105,7 +115,7 @@ use std::time::{Duration, Instant};
 type Q = BigRational;
 type P = Polynomial<Q, FinOrd>;
 
-const METHODS : [&str; 7] = ["elimination", "one-colour", "direct", "direct-plain", "colouring", "ordinary", "gfan"];
+const METHODS : [&str; 12] = ["elimination", "one-colour", "direct", "direct-plain", "colouring", "ordinary", "gfan", "direct-domain", "one-colour-domain", "colouring-domain", "one-colour-plain", "colouring-plain"];
 
 /// The command-line options of the parent process.
 struct Options {
@@ -273,6 +283,8 @@ fn subsets(vars : &[FinOrd]) -> Vec<BTreeSet<FinOrd>> {
 fn compute(method : &str, generators : &[P]) -> Option<Vec<P>> {
     let polynomials = |b : OrbitList<Q, FinOrd>| -> Vec<P> { b.iter().map(|o| o.evaluate(|p| p.clone())).collect() };
     let orbits = || -> OrbitList<Q, FinOrd> { generators.iter().cloned().map(Orbit::new).collect() };
+    let domain = OrbitOptions { selection : Selection::SmallestDomain, first_criterion : false };
+    let plain = OrbitOptions { selection : Selection::Creation, first_criterion : false };
     match method {
         "elimination" => {
             let vars : Vec<FinOrd> = generators.iter().flat_map(|g| g.domain()).collect::<BTreeSet<FinOrd>>().into_iter().collect();
@@ -288,7 +300,12 @@ fn compute(method : &str, generators : &[P]) -> Option<Vec<P>> {
         }
         "one-colour" => one_colour_groebner_basis(orbits(), 1_000_000).ok().map(polynomials),
         "direct" => Some(one_colour_basis(generators.to_vec(), DirectOptions::default())),
-        "direct-plain" => Some(one_colour_basis(generators.to_vec(), DirectOptions { criteria : false, normal_strategy : false })),
+        "direct-plain" => Some(one_colour_basis(generators.to_vec(), DirectOptions { criteria : false, strategy : Strategy::Creation })),
+        "direct-domain" => Some(one_colour_basis(generators.to_vec(), DirectOptions { criteria : true, strategy : Strategy::SmallestDomain })),
+        "one-colour-domain" => one_colour_groebner_basis_with(orbits(), 1_000_000, domain).ok().map(polynomials),
+        "colouring-domain" => equivariant_groebner_basis_with(orbits(), 1_000_000, domain).ok().map(polynomials),
+        "one-colour-plain" => one_colour_groebner_basis_with(orbits(), 1_000_000, plain).ok().map(polynomials),
+        "colouring-plain" => equivariant_groebner_basis_with(orbits(), 1_000_000, plain).ok().map(polynomials),
         "colouring" => equivariant_groebner_basis(orbits(), 1_000_000).ok().map(polynomials),
         "ordinary" => Some(buchberger(generators.to_vec())),
         _ => panic!("unknown method {method}"),

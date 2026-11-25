@@ -1,7 +1,6 @@
 use num_rational::Rational64;
 use std::collections::BTreeSet;
 use std::fmt::{Debug, Display, Formatter, Result};
-use itertools::Itertools;
 use std::sync::OnceLock;
 use crate::elements_with_atoms::{ElementsWithAtoms, PartialAut};
 use crate::logic::{Signature, Theory, LINEAR_ORDER};
@@ -82,25 +81,44 @@ impl AtomsWithOrd for DLO {
     }
 
     /// The orbit of a pair (S, T) with |S| = n and |T| = m is determined by how S
-    /// and T interleave. We list one representative per orbit: S ∪ T = {1, ..., k}
-    /// for some k with max(n, m) <= k <= n + m, every element of {1, ..., k} not in
-    /// S is in T, and T contains n + m - k elements of S.
+    /// and T interleave: by the word that says, for each element of S ∪ T in
+    /// increasing order, whether it is in S only, in T only, or in both. We list
+    /// one representative per word, with S ∪ T = {1, ..., k}, by a depth-first
+    /// search that gives the atoms 1, 2, ... in turn to S, to T or to both. Each
+    /// step pushes and pops one atom, so the only allocations are the two sets of
+    /// each representative.
     fn orbits_in_product(first : &BTreeSet<Self>, second : &BTreeSet<Self>)
         -> Vec<SetPairOrbit<Self>> {
-        let (n, m) = (first.len(), second.len());
-        let atom = |i : usize| DLO::from_int(i as i64);
         let mut reps = Vec::new();
-        for k in n.max(m)..=(n + m) {
-            for s in (1..=k).combinations(n) {
-                let outside_s : Vec<usize> = (1..=k).filter(|i| !s.contains(i)).collect();
-                for common in s.iter().cloned().combinations(n + m - k) {
-                    let s_atoms : BTreeSet<DLO> = s.iter().map(|&i| atom(i)).collect();
-                    let t_atoms : BTreeSet<DLO> = outside_s.iter().chain(common.iter()).map(|&i| atom(i)).collect();
-                    reps.push(Orbit::new((s_atoms, t_atoms)));
-                }
-            }
-        }
+        let (mut s, mut t) = (Vec::with_capacity(first.len()), Vec::with_capacity(second.len()));
+        interleavings(first.len(), second.len(), 1, &mut s, &mut t, &mut reps);
         reps
+    }
+}
+
+/// Appends to `out` one representative for each way to complete `s` and `t` to
+/// increasing lists of n and m atoms, by giving the atoms next, next + 1, ...
+/// in turn to `s` only, to `t` only, or to both.
+fn interleavings(n : usize, m : usize, next : i64, s : &mut Vec<DLO>, t : &mut Vec<DLO>, out : &mut Vec<SetPairOrbit<DLO>>) {
+    if s.len() == n && t.len() == m {
+        out.push(Orbit::new((s.iter().copied().collect(), t.iter().copied().collect())));
+        return;
+    }
+    let atom = DLO::from_int(next);
+    if s.len() < n {
+        s.push(atom);
+        interleavings(n, m, next + 1, s, t, out);
+        if t.len() < m {
+            t.push(atom);
+            interleavings(n, m, next + 1, s, t, out);
+            t.pop();
+        }
+        s.pop();
+    }
+    if t.len() < m {
+        t.push(atom);
+        interleavings(n, m, next + 1, s, t, out);
+        t.pop();
     }
 }
 
@@ -118,6 +136,7 @@ impl ElementsWithAtoms<DLO> for DLO {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use itertools::Itertools;
 
     fn d(i : i64) -> DLO {
         DLO::from_int(i)

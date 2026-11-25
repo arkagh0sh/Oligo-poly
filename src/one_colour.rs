@@ -30,8 +30,9 @@
 //!
 //! The pairs are treated in the order of their creation (first in, first out),
 //! as in `one_colour_groebner_basis`, or optionally with the normal strategy
-//! (smallest lcm first). In the experiments, the normal strategy was often much
-//! slower: on one ideal in 4 variables, 300 times slower.
+//! (smallest lcm first) or with the smallest domain |supp(f) ∪ supp(g)| first.
+//! In the experiments, the normal strategy was often much slower: on one ideal
+//! in 4 variables, 300 times slower.
 //!
 //! Optionally, Buchberger's two criteria are used, adapted to the support
 //! condition:
@@ -72,7 +73,7 @@ impl Default for Options {
     /// The adapted criteria, and the order of creation, which was much faster
     /// than the normal strategy in the experiments.
     fn default() -> Self {
-        Options { criteria : true, normal_strategy : false }
+        Options { criteria : true, strategy : Strategy::Creation }
     }
 }
 
@@ -106,29 +107,45 @@ fn colourings<F : AddAssign + Default + Eq + Zero + ConstOne + Clone, X : Ord + 
     list
 }
 
+/// The order in which the pairs are treated. The algorithm stops when every
+/// pair has been treated or skipped, whatever the order, and its correctness
+/// proof does not depend on the order (`README.tex`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Strategy {
+    /// The order in which the pairs were created (first in, first out), as in
+    /// `equivariant::one_colour_groebner_basis`.
+    Creation,
+    /// The normal strategy: smallest lcm of the leading monomials first.
+    Normal,
+    /// Smallest domain |supp(f) ∪ supp(g)| first.
+    SmallestDomain,
+}
+
 /// The options of `one_colour_basis`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Options {
     /// Whether the adapted Buchberger criteria are used.
     pub criteria : bool,
-    /// The order in which the pairs are treated: if true, the normal strategy
-    /// (smallest lcm of the leading monomials first); if false, the order in
-    /// which the pairs were created (first in, first out), as in
-    /// `equivariant::one_colour_groebner_basis`.
-    pub normal_strategy : bool,
+    /// The order in which the pairs are treated; ties are broken by the order
+    /// of creation.
+    pub strategy : Strategy,
 }
+
+/// The key of a pending pair (i, j): domain size, lcm, number of creation, i, j.
+type PairKey<X> = (usize, Monomial<Coloured<X>>, u64, usize, usize);
 
 /// The basis being computed: its elements, the polynomials already in it, and
 /// the pending pairs (with the set `members` for the chain criterion). A pair
-/// is stored with a key: its lcm with the normal strategy, and 1 otherwise; ties
-/// are broken by the order of creation.
+/// is stored with a key: its domain size with the smallest domain first (0
+/// otherwise), then its lcm with the normal strategy (1 otherwise), then its
+/// number of creation.
 struct State<F, X : Ord + Hash + Clone> {
     basis : Vec<Element<F, X>>,
     seen : BTreeSet<Polynomial<F, Coloured<X>>>,
-    queue : BTreeSet<(Monomial<Coloured<X>>, u64, usize, usize)>,
+    queue : BTreeSet<PairKey<X>>,
     members : BTreeSet<(usize, usize)>,
     created : u64,
-    normal_strategy : bool,
+    strategy : Strategy,
 }
 
 impl<F, X> State<F, X>
@@ -146,8 +163,15 @@ where
         let k = self.basis.len();
         for (i, b) in self.basis.iter().enumerate() {
             if consistent(b, &e) {
-                let key = if self.normal_strategy { b.leading.lcm(&e.leading) } else { Monomial::one() };
-                self.queue.insert((key, self.created, i, k));
+                let domain = match self.strategy {
+                    Strategy::SmallestDomain => b.support.union(&e.support).count(),
+                    _ => 0,
+                };
+                let lcm = match self.strategy {
+                    Strategy::Normal => b.leading.lcm(&e.leading),
+                    _ => Monomial::one(),
+                };
+                self.queue.insert((domain, lcm, self.created, i, k));
                 self.created += 1;
                 self.members.insert((i, k));
             }
@@ -220,7 +244,7 @@ where
         queue : BTreeSet::new(),
         members : BTreeSet::new(),
         created : 0,
-        normal_strategy : options.normal_strategy,
+        strategy : options.strategy,
     };
     for g in generators {
         if !g.is_zero() {
@@ -229,7 +253,7 @@ where
             }
         }
     }
-    while let Some((_, _, i, j)) = state.queue.pop_first() {
+    while let Some((_, _, _, i, j)) = state.queue.pop_first() {
         state.members.remove(&(i, j));
         if options.criteria {
             let lcm = state.basis[i].leading.lcm(&state.basis[j].leading);
@@ -297,13 +321,20 @@ mod tests {
     }
 
     fn all_options() -> Vec<Options> {
-        [false, true].into_iter().flat_map(|criteria| [false, true].map(|normal_strategy| Options { criteria, normal_strategy })).collect()
+        let strategies = [Strategy::Creation, Strategy::Normal, Strategy::SmallestDomain];
+        [false, true].into_iter().flat_map(|criteria| strategies.map(|strategy| Options { criteria, strategy })).collect()
     }
 
-    /// The options used on random ideals: the normal strategy can be very slow
-    /// for this algorithm, so only the order of creation is used.
+    /// The options used on random ideals: the order of creation with and
+    /// without the criteria, and the smallest domain first with the criteria.
+    /// The other strategies can be very slow on some of these ideals (the
+    /// normal strategy, and the smallest domain first without the criteria).
     fn creation_order_options() -> Vec<Options> {
-        [false, true].map(|criteria| Options { criteria, normal_strategy : false }).to_vec()
+        vec![
+            Options { criteria : false, strategy : Strategy::Creation },
+            Options { criteria : true, strategy : Strategy::Creation },
+            Options { criteria : true, strategy : Strategy::SmallestDomain },
+        ]
     }
 
     #[test]
