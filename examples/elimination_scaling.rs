@@ -111,7 +111,7 @@ use std::time::{Duration, Instant};
 type Q = BigRational;
 type P = Polynomial<Q, FinOrd>;
 
-const METHODS : [&str; 7] = ["elimination", "one-colour", "direct", "direct-plain", "colouring", "ordinary", "gfan"];
+const METHODS : [&str; 10] = ["elimination", "one-colour", "direct", "direct-plain", "colouring", "ordinary", "gfan", "direct-domain", "one-colour-domain", "colouring-domain"];
 
 /// The command-line options of the parent process.
 struct Options {
