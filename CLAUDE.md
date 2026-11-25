@@ -23,6 +23,14 @@
   of creation solved, sometimes in 14 ms; on symbolic atoms it was slower in
   5 of 7 cases, adding 2 to 3 times more orbits (November 2026).
 
+- Buchberger's first criterion in the orbit algorithms
+  (`Options::first_criterion`: skip the positions whose leading monomials share
+  no atom) is correct (README.tex, proof of `lem:settled`, and the argument for
+  the colouring via `lem:weak basis`) and faster on every ideal measured: 1.1 to
+  3 times for one colour and 3 to 11 times for the colouring on 30 random
+  ideals in 4 to 6 variables, and 2 to 12 times on symbolic atoms, where it
+  also finished cases that took more than 120 s (November 2026).
+
 ## Next steps
 
 - Introduce tricks for faster Gröbner bases: for example Buchberger's criteria
